@@ -1,0 +1,112 @@
+{
+ "source": "PinPoint Light 2회",
+ "status": "초안 — 대장 검토 전",
+ "problems": [
+  {
+   "number": 1,
+   "mainUnit": "INTEG",
+   "tags": [
+    "INTEG|넓이|곡선과 직선",
+    "INTEG|정적분|정의·계산",
+    "DIFF|방정식·부등식|두 그래프 교점",
+    "TOOL|답 형식|서로소 p+q 꼴"
+   ]
+  },
+  {
+   "number": 2,
+   "mainUnit": "DIFF",
+   "tags": [
+    "DIFF|도함수|다항함수 미분법",
+    "DIFF|극대·극소|극값 구하기",
+    "DIFF|극대·극소|극댓값·극솟값의 합·차·곱",
+    "TOOL|대수|인수분해"
+   ]
+  },
+  {
+   "number": 3,
+   "mainUnit": "SEQ",
+   "tags": [
+    "SEQ|∑|∑의 성질",
+    "SEQ|∑|첨자 바꾸기·뒤집기",
+    "TOOL|대수|연립방정식"
+   ]
+  },
+  {
+   "number": 4,
+   "mainUnit": "EXPLOG",
+   "tags": [
+    "EXPLOG|지수|실수인 n제곱근의 개수(n 짝·홀)",
+    "TOOL|풀이 전략|경우 나누기(짝·홀 등)",
+    "SEQ|∑|여러 가지 수열의 합"
+   ]
+  },
+  {
+   "number": 5,
+   "mainUnit": "INTEG",
+   "tags": [
+    "LIMIT|연속|구간별 정의 함수의 연속",
+    "TOOL|함수|f(x+p)=f(x)+c 꼴",
+    "INTEG|넓이|곡선과 x축",
+    "INTEG|넓이|주기·평행이동 이용",
+    "INTEG|정적분|정의·계산"
+   ]
+  },
+  {
+   "number": 6,
+   "mainUnit": "DIFF",
+   "tags": [
+    "DIFF|극대·극소|극값의 정의",
+    "DIFF|극대·극소|극댓값·극솟값의 합·차·곱",
+    "TOOL|도형|두 점 사이 거리"
+   ]
+  },
+  {
+   "number": 7,
+   "mainUnit": "DIFF",
+   "tags": [
+    "DIFF|최대·최소|닫힌구간에서 최대·최소",
+    "DIFF|증가·감소|증감표",
+    "DIFF|극대·극소|극값 구하기",
+    "TOOL|대수|항등식·미정계수"
+   ]
+  },
+  {
+   "number": 8,
+   "mainUnit": "TRIG",
+   "tags": [
+    "TRIG|일반각·호도법|부채꼴의 호의 길이·넓이",
+    "TRIG|사인·코사인법칙|코사인법칙",
+    "TRIG|정의·성질|sin²+cos²=1, tan=sin/cos",
+    "TRIG|사인·코사인법칙|삼각형 넓이(½ab sinC)",
+    "TOOL|도형|원의 접선",
+    "DIFF|최대·최소|도형 활용 최대·최소",
+    "TOOL|답 형식|서로소 p+q 꼴"
+   ]
+  },
+  {
+   "number": 9,
+   "mainUnit": "LIMIT",
+   "tags": [
+    "LIMIT|연속|구간별 정의 함수의 연속",
+    "LIMIT|연속|절댓값 함수의 연속",
+    "LIMIT|연속|합성함수의 연속",
+    "LIMIT|극한|좌극한·우극한",
+    "LIMIT|극한|다항함수 결정",
+    "TOOL|풀이 전략|경우 나누기(짝·홀 등)"
+   ]
+  },
+  {
+   "number": 10,
+   "mainUnit": "DIFF",
+   "tags": [
+    "DIFF|극대·극소|극값의 정의",
+    "DIFF|평균값 정리|롤의 정리",
+    "DIFF|증가·감소|증감표",
+    "INTEG|정적분|절댓값 포함 정적분",
+    "INTEG|정적분|∫f′=f(b)−f(a) 활용",
+    "INTEG|정적분|정적분의 대소 관계(부등식)",
+    "TOOL|풀이 전략|〈보기〉 ㄱㄴㄷ 판별"
+   ]
+  }
+ ]
+}
