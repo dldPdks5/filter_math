@@ -10,7 +10,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const tagIds = Array.isArray(body.tagIds) ? body.tagIds.map(Number).filter(Number.isFinite) : [];
   const tagStatus = body.tagStatus === "confirmed" ? "confirmed" : "draft";
   try {
-    await (await getRepo()).setProblemTags(id, { mainUnit: body.mainUnit || null, tagIds, tagStatus });
+    const points = body.points === undefined ? undefined : Number.isInteger(Number(body.points)) && Number(body.points) > 0 ? Number(body.points) : null;
+    await (await getRepo()).setProblemTags(id, { mainUnit: body.mainUnit || null, tagIds, tagStatus, points });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });

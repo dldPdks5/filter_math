@@ -40,6 +40,7 @@ export async function ingestHwpx(repo: Repo, file: Uint8Array, opt: { curriculum
       solutionBlocks: p.solutionBlocks,
       images: p.images,
       solutionImages: p.solutionImages,
+      points: p.points,
     })),
     file,
     images

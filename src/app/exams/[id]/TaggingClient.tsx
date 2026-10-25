@@ -6,6 +6,7 @@ export interface ClientProblem {
   id: string;
   number: number;
   answer: string;
+  points: number | null;
   mainUnit: string | null;
   tagStatus: TagStatus;
   tagIds: number[];
@@ -59,7 +60,7 @@ export default function TaggingClient({
         const res = await fetch(`/api/problems/${next.id}/tags`, {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ mainUnit: next.mainUnit, tagIds: next.tagIds, tagStatus: next.tagStatus }),
+          body: JSON.stringify({ mainUnit: next.mainUnit, tagIds: next.tagIds, tagStatus: next.tagStatus, points: next.points }),
         });
         if (!res.ok) throw new Error((await res.json()).error);
         setSave("saved");
@@ -148,6 +149,13 @@ export default function TaggingClient({
         <div className="stage-head">
           <span className="src">{exam.title} {p.number}번</span>
           <span className="ans">정답 {p.answer || "—"}</span>
+          <label className="ans">
+            배점{" "}
+            <select value={p.points ?? ""} onChange={(e) => update({ points: e.target.value ? Number(e.target.value) : null })} aria-label="배점">
+              <option value="">없음</option>
+              {[2, 3, 4].map((n) => <option key={n} value={n}>{n}점</option>)}
+            </select>
+          </label>
           <div className="seg sw" role="group" aria-label="보기 전환">
             <button aria-pressed={!showSol} onClick={() => setShowSol(false)}>문제</button>
             <button aria-pressed={showSol} onClick={() => setShowSol(true)}>문제 + 해설</button>

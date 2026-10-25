@@ -34,6 +34,7 @@ export interface ProblemInput {
   solutionBlocks: Block[];
   images: string[];
   solutionImages: string[];
+  points: number | null; // 배점, 없으면 null
 }
 /** 목록·필터용 (XML 제외) */
 export interface ProblemSummary {
@@ -43,6 +44,7 @@ export interface ProblemSummary {
   curriculum: Curriculum;
   number: number;
   answer: string;
+  points: number | null;
   mainUnit: string | null;
   tagStatus: TagStatus;
   tagIds: number[];
@@ -61,9 +63,10 @@ export interface ProblemFilter {
   mainOnly?: boolean; // 주 단원이 unitKeys인 문제만
   curriculum?: Curriculum; // '따로 보기'일 때만 지정
   status?: TagStatus;
+  points?: number[]; // 고른 배점들 (0 = 배점 표기 없음)
 }
 
-export interface TagUpdate { mainUnit: string | null; tagIds: number[]; tagStatus: TagStatus }
+export interface TagUpdate { mainUnit: string | null; tagIds: number[]; tagStatus: TagStatus; points?: number | null }
 
 export type AnswerMode = "none" | "key" | "solutions";
 export interface WorksheetOptions { answers: AnswerMode; showSource: boolean }
@@ -93,6 +96,7 @@ export function matchFilter(p: ProblemSummary, f: ProblemFilter, tagUnit: Map<nu
   if (f.examId && p.examId !== f.examId) return false;
   if (f.curriculum && p.curriculum !== f.curriculum) return false;
   if (f.status && p.tagStatus !== f.status) return false;
+  if (f.points?.length && !f.points.includes(p.points ?? 0)) return false;
   if (f.unitKeys?.length) {
     const units = new Set(f.unitKeys);
     const inMain = p.mainUnit ? units.has(p.mainUnit) : false;

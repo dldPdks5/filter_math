@@ -9,6 +9,7 @@ export interface SearchProblem {
   curriculum: string;
   number: number;
   answer: string;
+  points: number | null;
   mainUnit: string | null;
   tagStatus: string;
   tagIds: number[];
@@ -38,6 +39,7 @@ export default function SearchClient({
   const [examId, setExamId] = useState("");
   const [confirmedOnly, setConfirmedOnly] = useState(false);
   const [mainOnly, setMainOnly] = useState(false);
+  const [points, setPoints] = useState<number[]>([]); // 0 = 배점 없음
   const [limit, setLimit] = useState(PAGE);
 
   // ── 바구니(학습지) 상태
@@ -89,9 +91,10 @@ export default function SearchClient({
         (p) =>
           (linked || p.curriculum === curr) &&
           (!examId || p.examId === examId) &&
-          (!confirmedOnly || p.tagStatus === "confirmed")
+          (!confirmedOnly || p.tagStatus === "confirmed") &&
+          (!points.length || points.includes(p.points ?? 0))
       ),
-    [problems, linked, curr, examId, confirmedOnly]
+    [problems, linked, curr, examId, confirmedOnly, points]
   );
   const inUnit = (p: SearchProblem, u: string) => (mainOnly ? p.mainUnit === u : p.mainUnit === u || p.tagIds.some((t) => tagUnit(t) === u));
 
@@ -261,6 +264,22 @@ export default function SearchClient({
         )}
 
         <div className="f-block">
+          <div className="f-label">배점</div>
+          <div className="chips">
+            {[2, 3, 4, 0].map((n) => {
+              const cnt = problems.filter((p) => (linked || p.curriculum === curr) && (p.points ?? 0) === n).length;
+              if (n === 0 && cnt === 0) return null;
+              return (
+                <button key={n} className="chip" aria-pressed={points.includes(n)} onClick={() => setPoints((s) => (s.includes(n) ? s.filter((x) => x !== n) : [...s, n]))}>
+                  {n ? `${n}점` : "배점 없음"} <span className="cn">{cnt}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="note">아무것도 고르지 않으면 모든 배점을 보여 줍니다.</p>
+        </div>
+
+        <div className="f-block">
           <div className="f-label">그 밖의 조건</div>
           <select className="input" value={examId} onChange={(e) => setExamId(e.target.value)} aria-label="회차">
             <option value="">모든 회차</option>
@@ -278,6 +297,7 @@ export default function SearchClient({
           <span className="note">
             {unit ? unitName.get(unit) : "모든 단원"}
             {tags.length ? ` › ${tags.map((t) => tagById.get(t)?.name).join(mode === "all" ? " + " : " 또는 ")}` : ""}
+            {points.length ? ` / ${points.map((n) => (n ? `${n}점` : "배점 없음")).join(", ")}` : ""}
           </span>
           {results.length > 0 && (
             <button className="btn" style={{ marginLeft: "auto" }} onClick={() => setBasket((b) => [...b, ...results.map((p) => p.id).filter((id) => !b.includes(id))])}>
@@ -292,7 +312,7 @@ export default function SearchClient({
               <header>
                 <span className="src">{p.examTitle} {p.number}번</span>
                 <span className="unit">{p.mainUnit ? unitName.get(p.mainUnit) : "미분류"}</span>
-                <span className="ans">정답 {p.answer || "-"}</span>
+                <span className="ans">{p.points ? `${p.points}점 / ` : ""}정답 {p.answer || "-"}</span>
                 <button className={`btn${inBasket(p.id) ? "" : " primary"}`} onClick={() => toggleBasket(p.id)}>
                   {inBasket(p.id) ? `빼기 (${basket.indexOf(p.id) + 1}번)` : "담기"}
                 </button>

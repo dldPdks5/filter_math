@@ -96,22 +96,45 @@ function remapHeaderItem(xml: string, key: ListKey, r: Remap): string {
 }
 
 /** 문항 XML 안의 참조를 새 번호로 */
-function remapSection(xml: string, r: Remap, srcProblemStyle: string): string {
+function remapSection(xml: string, r: Remap, srcProblemStyle: string, plain: Plain, k: number): string {
   // '문제' 스타일 문단 → 바탕 문서의 문제 스타일·문단모양 (번호 연속)
-  let s = xml.replace(/<hp:p ([^>]*)>/g, (w, attrs: string) => {
+  //   바탕 문서가 형식 B(번호 직접 입력)이면 → 바탕글 문단 + "k. " 글자
+  let s = !srcProblemStyle ? xml : xml.replace(/<hp:p ([^>]*)>/g, (w, attrs: string) => {
     if (!new RegExp(`\\sstyleIDRef="${srcProblemStyle}"`).test(" " + attrs)) return w;
+    const toPlain = !r.problemStyle;
     const a = (" " + attrs)
-      .replace(/\sstyleIDRef="[^"]*"/, ` styleIDRef="§S${r.problemStyle}"`)
-      .replace(/\sparaPrIDRef="[^"]*"/, ` paraPrIDRef="§P${r.problemParaPr}"`)
+      .replace(/\sstyleIDRef="[^"]*"/, ` styleIDRef="§S${toPlain ? plain.style : r.problemStyle}"`)
+      .replace(/\sparaPrIDRef="[^"]*"/, ` paraPrIDRef="§P${toPlain ? plain.paraPr : r.problemParaPr}"`)
       .slice(1);
-    return `<hp:p ${a}>`;
+    return `<hp:p ${a}>` + (toPlain ? `<hp:run charPrIDRef="§C${plain.charPr}"><hp:t>${k}. </hp:t></hp:run>` : "");
   });
   s = remapAttr(s, "paraPrIDRef", r.maps.paraPr);
   s = remapAttr(s, "charPrIDRef", r.maps.charPr);
   s = remapAttr(s, "styleIDRef", r.maps.style);
   s = remapAttr(s, "borderFillIDRef", r.maps.borderFill);
   s = remapAttr(s, "binaryItemIDRef", r.bin);
-  return s.replace(/="§[SP](\d+)"/g, '="$1"');
+  return s.replace(/="§[SPC](\d+)"/g, '="$1"');
+}
+
+interface Plain { style: string; paraPr: string; charPr: string }
+
+/** 형식 B 문항의 맨 앞 직접 입력 번호("3. ")를 새 번호로 바꾸거나(k) 지움(null) */
+function setTypedNumber(xml: string, k: number | null): string {
+  let done = false;
+  return xml.replace(/<hp:t>([^<]*)/g, (w, text: string) => {
+    if (done || !text.trim()) return w;
+    done = true;
+    const m = text.match(/^(\s*)(\d{1,2})\s*\.\s*/);
+    if (!m) return w;
+    return `<hp:t>${m[1]}${k === null ? "" : `${k}. `}${text.slice(m[0].length)}`;
+  });
+}
+
+/** 첫 문단의 스타일·문단모양 바꾸기 */
+function setFirstParaStyle(xml: string, style: string, paraPr: string): string {
+  return xml.replace(/<hp:p ([^>]*)>/, (w, attrs: string) =>
+    `<hp:p ${(" " + attrs).replace(/\sstyleIDRef="[^"]*"/, ` styleIDRef="${style}"`).replace(/\sparaPrIDRef="[^"]*"/, ` paraPrIDRef="${paraPr}"`).slice(1)}>`
+  );
 }
 
 interface Doc {
@@ -124,7 +147,7 @@ interface Doc {
 /** 다른 회차의 header 목록을 바탕 문서에 이어 붙이고 Remap 반환 */
 function mergeHeader(base: Doc, srcHeader: string, srcHpf: string, srcZip: JSZip, srcProblemStyle: string, baseProblemStyle: string, out: Map<string, Uint8Array | Promise<Uint8Array>>, sameTemplate: boolean, usedBins: Set<string>): Remap {
   const r: Remap = { maps: {}, bin: new Map(), problemStyle: baseProblemStyle, problemParaPr: "" };
-  const baseStyle = base.header.match(new RegExp(`<hh:style id="${baseProblemStyle}"[^>]*paraPrIDRef="(\\d+)"`));
+  const baseStyle = baseProblemStyle ? base.header.match(new RegExp(`<hh:style id="${baseProblemStyle}"[^>]*paraPrIDRef="(\\d+)"`)) : null;
   r.problemParaPr = baseStyle?.[1] ?? "0";
 
   // 그림: 항상 새 이름으로 복사
@@ -256,16 +279,32 @@ export async function composeWorksheet(exams: ComposeExam[], items: ComposeItem[
   const s0 = base.header.match(/<hh:style id="0"[^>]*paraPrIDRef="(\d+)"[^>]*charPrIDRef="(\d+)"/);
   const plain = { style: "0", paraPr: s0?.[1] ?? "0", charPr: s0?.[2] ?? "0" };
 
-  const bodies = items.map((it) => {
+  const baseText = !baseExam.problemStyleId; // 바탕 문서가 형식 B(번호 직접 입력)
+  const baseProbParaPr = baseText ? "" : (base.header.match(new RegExp(`<hh:style id="${baseExam.problemStyleId}"[^>]*paraPrIDRef="(\\d+)"`))?.[1] ?? "0");
+  const bodies = items.map((it, i) => {
+    const k = i + 1;
+    const ex = byKey.get(it.examKey)!;
     let x = opt.answers === "solutions" ? it.problemXmlWithSolution : it.problemXml;
     const r = remaps.get(it.examKey);
-    if (r) x = remapSection(x, r, byKey.get(it.examKey)!.problemStyleId);
+    if (r) x = remapSection(x, r, ex.problemStyleId, plain, k);
+    if (!ex.problemStyleId) {
+      // 형식 B 문항
+      if (baseText) x = setTypedNumber(x, k); // 번호를 새 순서로
+      else x = setFirstParaStyle(setTypedNumber(x, null), baseExam.problemStyleId, baseProbParaPr); // 자동 번호로
+    }
     if (opt.showSource) x = insertAfterContent(x, plainPara(`[${it.label}]`, plain));
     return x;
   });
 
-  let shell = baseExam.shellRunsXml;
-  if (opt.title && baseExam.headerTitleText) shell = shell.split(escapeXml(baseExam.headerTitleText)).join(escapeXml(opt.title));
+  // 학습지 제목: 바탕 문서의 회차 제목 글자(본문·머리말)를 바꿈
+  const swapTitle = (src: string) => {
+    if (!opt.title || !baseExam.headerTitleText) return src;
+    let out = src;
+    for (const t of baseExam.headerTitleText.split("\u0001").filter(Boolean)) out = out.split(`>${escapeXml(t)}<`).join(`>${escapeXml(opt.title)}<`).split(escapeXml(t)).join(escapeXml(opt.title));
+    return out;
+  };
+  const shell = swapTitle(baseExam.shellRunsXml);
+  const sectionHead = swapTitle(baseExam.sectionHead);
   bodies[0] = firstParaFix(bodies[0], shell);
 
   if (opt.answers !== "none") {
@@ -276,7 +315,7 @@ export async function composeWorksheet(exams: ComposeExam[], items: ComposeItem[
     bodies.push(plainPara("빠른 정답", { ...plain, pageBreak: true }), ...lines.map((l) => plainPara(l, plain)));
   }
 
-  const section0 = baseExam.sectionHead + bodies.join("") + baseExam.sectionTail;
+  const section0 = sectionHead + bodies.join("") + baseExam.sectionTail;
 
   // 남는 구역·바탕쪽 정리
   let hpf = base.hpf;

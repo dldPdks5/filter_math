@@ -45,7 +45,7 @@ async function save(db: Db) {
 function summary(db: Db, p: Db["problems"][number]): ProblemSummary {
   const e = db.exams.find((x) => x.id === p.examId)!;
   return {
-    id: p.id, examId: p.examId, examTitle: e.title, curriculum: e.curriculum, number: p.number, answer: p.answer,
+    id: p.id, examId: p.examId, examTitle: e.title, curriculum: e.curriculum, number: p.number, answer: p.answer, points: p.points ?? null,
     mainUnit: p.mainUnit, tagStatus: p.tagStatus, tagIds: p.tagIds, problemBlocks: p.problemBlocks, solutionBlocks: p.solutionBlocks,
   };
 }
@@ -120,6 +120,7 @@ export const localRepo: Repo = {
       p.mainUnit = u.mainUnit;
       p.tagIds = [...new Set(u.tagIds)];
       p.tagStatus = u.tagStatus;
+      if (u.points !== undefined) p.points = u.points;
       await save(db);
     });
   },

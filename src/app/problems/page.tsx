@@ -20,6 +20,7 @@ export default async function ProblemsPage({ searchParams }: { searchParams: Pro
     curriculum: p.curriculum,
     number: p.number,
     answer: p.answer,
+    points: p.points,
     mainUnit: p.mainUnit,
     tagStatus: p.tagStatus,
     tagIds: p.tagIds,

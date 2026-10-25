@@ -21,11 +21,16 @@ function examFromRow(r: any, count = 0): ExamRow {
   };
 }
 
-const SUMMARY_COLS = "id, exam_id, number, answer, main_unit, tag_status, problem_blocks, solution_blocks, problem_tags(tag_id), exams!inner(title, curriculum)";
+const SUMMARY_BASE = "id, exam_id, number, answer, main_unit, tag_status, problem_blocks, solution_blocks, problem_tags(tag_id), exams!inner(title, curriculum)";
+// points 칸은 003_points.sql 실행 후 생김 — 실행 전에도 앱이 멈추지 않도록 없으면 빼고 다시 조회
+let hasPoints = true;
+const cols = () => (hasPoints ? SUMMARY_BASE + ", points" : SUMMARY_BASE);
+const missingPoints = (e: any) => !!e && /points/.test(String(e.message ?? ""));
 
 function summaryFromRow(r: any): ProblemSummary {
   return {
     id: r.id, examId: r.exam_id, examTitle: r.exams.title, curriculum: r.exams.curriculum, number: r.number, answer: r.answer ?? "",
+    points: r.points ?? null,
     mainUnit: r.main_unit, tagStatus: r.tag_status, tagIds: (r.problem_tags ?? []).map((t: any) => Number(t.tag_id)),
     problemBlocks: r.problem_blocks, solutionBlocks: r.solution_blocks,
   };
@@ -81,23 +86,30 @@ export function supabaseRepo(sb: SupabaseClient): Repo {
           image_files: Object.fromEntries(images.map((im) => [im.binId, { file: `${id}/${im.fileName}`, mime: im.mime }])),
         })
       );
-      check(
-        await sb.from("problems").insert(
-          problems.map((p) => ({
-            exam_id: id, number: p.number, answer: p.answer, problem_xml: p.problemXml, problem_xml_sol: p.problemXmlWithSolution,
-            solution_xml: p.solutionXml, problem_blocks: p.problemBlocks, solution_blocks: p.solutionBlocks, images: p.images,
-            solution_images: p.solutionImages,
-          }))
-        )
-      );
+      const rows = problems.map((p) => ({
+        exam_id: id, number: p.number, answer: p.answer, problem_xml: p.problemXml, problem_xml_sol: p.problemXmlWithSolution,
+        solution_xml: p.solutionXml, problem_blocks: p.problemBlocks, solution_blocks: p.solutionBlocks, images: p.images,
+        solution_images: p.solutionImages, ...(hasPoints ? { points: p.points } : {}),
+      }));
+      let ins = await sb.from("problems").insert(rows);
+      if (missingPoints(ins.error)) {
+        hasPoints = false;
+        ins = await sb.from("problems").insert(rows.map(({ points: _p, ...r }: any) => r));
+      }
+      check(ins);
       return id;
     },
     async listProblems(f: ProblemFilter) {
-      let q = sb.from("problems").select(SUMMARY_COLS);
-      if (f.examId) q = q.eq("exam_id", f.examId);
-      if (f.status) q = q.eq("tag_status", f.status);
-      if (f.curriculum) q = q.eq("exams.curriculum", f.curriculum);
-      const rows = check(await q.order("number")) as any[];
+      const run = () => {
+        let q = sb.from("problems").select(cols());
+        if (f.examId) q = q.eq("exam_id", f.examId);
+        if (f.status) q = q.eq("tag_status", f.status);
+        if (f.curriculum) q = q.eq("exams.curriculum", f.curriculum);
+        return q.order("number");
+      };
+      let res = await run();
+      if (missingPoints(res.error) && hasPoints) { hasPoints = false; res = await run(); }
+      const rows = check(res) as any[];
       const tax = await this.getTaxonomy();
       const secUnit = new Map(tax.sections.map((s) => [s.id, s.unitKey]));
       const tagUnit = new Map(tax.tags.map((t) => [t.id, secUnit.get(t.sectionId)!]));
@@ -108,7 +120,10 @@ export function supabaseRepo(sb: SupabaseClient): Repo {
     },
     async getProblems(ids) {
       if (!ids.length) return [];
-      const rows = check(await sb.from("problems").select(`${SUMMARY_COLS}, problem_xml, problem_xml_sol, solution_xml, images, solution_images`).in("id", ids)) as any[];
+      const run = () => sb.from("problems").select(`${cols()}, problem_xml, problem_xml_sol, solution_xml, images, solution_images`).in("id", ids);
+      let res = await run();
+      if (missingPoints(res.error) && hasPoints) { hasPoints = false; res = await run(); }
+      const rows = check(res) as any[];
       const byId = new Map(rows.map((r) => [r.id, r]));
       return ids
         .map((id) => byId.get(id))
@@ -120,7 +135,11 @@ export function supabaseRepo(sb: SupabaseClient): Repo {
         })) as ProblemRow[];
     },
     async setProblemTags(id: string, u: TagUpdate) {
-      check(await sb.from("problems").update({ main_unit: u.mainUnit, tag_status: u.tagStatus }).eq("id", id));
+      const upd: Record<string, unknown> = { main_unit: u.mainUnit, tag_status: u.tagStatus };
+      if (u.points !== undefined && hasPoints) upd.points = u.points;
+      let r = await sb.from("problems").update(upd).eq("id", id);
+      if (missingPoints(r.error)) { hasPoints = false; delete upd.points; r = await sb.from("problems").update(upd).eq("id", id); }
+      check(r);
       check(await sb.from("problem_tags").delete().eq("problem_id", id));
       const ids = [...new Set(u.tagIds)];
       if (ids.length) check(await sb.from("problem_tags").insert(ids.map((tag_id) => ({ problem_id: id, tag_id }))));

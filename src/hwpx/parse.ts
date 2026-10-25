@@ -29,14 +29,15 @@ export interface ParsedProblem {
   images: string[]; // 문항에 쓰인 이미지 id
   solutionImages: string[];
   equationCount: number;
+  points: number | null; // 배점 ([2점] 등), 없으면 null
 }
 
 export interface ParsedExam {
   sourceTitle: string; // 예: "PinPoint Light 2회"
   sourceRaw: string; // 머리 표 원문
-  headerTitleText: string; // 머리 표 안 회차 문구 원문 (예: "PinPoint Light : 2회")
-  problemStyleId: string;
-  sectionHead: string; // section0.xml 의 <hs:sec ...> 여는 부분까지
+  headerTitleText: string; // 학습지 제목으로 바꿀 원문 글자들 (여러 개면 \u0001로 구분)
+  problemStyleId: string; // 형식 A의 '문제' 스타일 id, 형식 B(번호 직접 입력)는 ""
+  sectionHead: string; // section0.xml 의 <hs:sec ...> 여는 부분 + 첫 문항 앞 머리 문단
   sectionTail: string; // </hs:sec> 이후
   shellRunsXml: string; // 구역 설정(secPr)·단 설정·머리 장식 run들
   columnWidth: number; // 단 너비(HWPUNIT)
@@ -144,6 +145,17 @@ function toBlocks(xml: string, paras: Span[], ctx: Ctx): Block[] {
   return blocks;
 }
 
+/** 첫 글자 조각의 "3. " 같은 직접 입력 번호 제거 (형식 B 화면용) */
+function stripTypedNumber(blocks: Block[]) {
+  for (const b of blocks) {
+    const i = b.findIndex((x) => x.k !== "t" || x.v.trim());
+    if (i < 0) continue;
+    const it = b[i];
+    if (it.k === "t") it.v = it.v.replace(/^\s*\d{1,2}\s*\.\s*/, "");
+    return;
+  }
+}
+
 export function blockText(b: Block): string {
   return b.map((i) => (i.k === "t" ? i.v : i.k === "eq" ? `$${i.v}$` : "")).join("");
 }
@@ -197,7 +209,8 @@ function parseBorders(header: string): Record<string, string> {
 
 function columnWidthOf(shell: string): number {
   const pp = shell.match(/<hp:pagePr [^>]*width="(\d+)"[^>]*>[\s\S]*?<hp:margin [^>]*left="(\d+)" right="(\d+)"/);
-  const col = shell.match(/<hp:colPr [^>]*colCount="(\d+)"[^>]*sameGap="(\d+)"/);
+  const cols = [...shell.matchAll(/<hp:colPr [^>]*colCount="(\d+)"[^>]*sameGap="(\d+)"/g)];
+  const col = cols[cols.length - 1];
   if (!pp) return 32000;
   const landscape = /landscape="NARROWLY"/.test(shell); // NARROWLY=가로, WIDELY=세로
   const pageW = +pp[1];
@@ -216,31 +229,73 @@ export async function parseHwpx(buf: Buffer | Uint8Array | ArrayBuffer): Promise
   if (!sec) throw new Error("section0.xml이 없습니다. HWPX 파일이 맞는지 확인해 주세요.");
   const xml = await sec.async("string");
 
-  // '문제' 스타일 id 찾기
-  const styleM = header.match(/<hh:style id="(\d+)" type="PARA" name="문제"/);
-  if (!styleM) throw new Error("'문제' 문단 스타일을 찾지 못했습니다");
-  const problemStyleId = styleM[1];
-
   const root = children(xml, 0, xml.length).find((s) => s.name === "hs:sec")!;
   const paras = inner(xml, root).filter((s) => s.name === "hp:p");
-  const starts = paras.map((p, i) => (p.attrs.styleIDRef === problemStyleId ? i : -1)).filter((i) => i >= 0);
-  if (!starts.length) throw new Error("문항 시작 문단이 없습니다");
+  const paraText = (p: Span) =>
+    findAll(xml, "hp:t", p.start, p.end).map((t) => textOf(xml, t)).join("").replace(/\s+/g, " ").trim();
 
-  // 머리 표에서 출처
+  // ── 형식 판별
+  // 형식 A: '문제' 문단 스타일(자동 번호) + 미주 해설
+  // 형식 B: 문단 맨 앞에 "1." "2." … 를 직접 입력, 맨 끝 [정답] 목록
+  const styleM = header.match(/<hh:style id="(\d+)" type="PARA" name="문제"/);
+  let problemStyleId = styleM?.[1] ?? "";
+  let starts = problemStyleId ? paras.map((p, i) => (p.attrs.styleIDRef === problemStyleId ? i : -1)).filter((i) => i >= 0) : [];
+  let endIdx = paras.length; // 마지막 문항이 끝나는 문단(정답 목록 시작)
+  const keyAnswers = new Map<number, string>();
+  if (!starts.length) {
+    problemStyleId = "";
+    let expect = 1;
+    for (let i = 0; i < paras.length; i++) {
+      const t = paraText(paras[i]);
+      if (/^\[?\s*정\s*답\s*\]?(\s|$)/.test(t) && starts.length) { endIdx = i; break; }
+      const m = t.match(/^(\d{1,2})\s*\.\s*\S/);
+      if (m && +m[1] === expect) { starts.push(i); expect++; }
+    }
+    // [정답] 목록: "1 ③", "16  6", "3) ②" 등
+    for (let i = endIdx; i < paras.length; i++) {
+      const t = paraText(paras[i]);
+      for (const m of t.matchAll(/(\d{1,2})\s*[).]?\s+([①-⑤]|-?\d+(?:\.\d+)?|[ㄱ-ㅎ](?:\s*,\s*[ㄱ-ㅎ])*)/g)) keyAnswers.set(+m[1], m[2]);
+    }
+  }
+  if (!starts.length)
+    throw new Error(
+      "문항을 찾지 못했습니다. 다음 둘 중 하나의 형식이어야 합니다.\n" +
+        "· 문항마다 '문제' 문단 스타일이 걸린 파일 (해설은 미주)\n" +
+        "· 문단 맨 앞에 1. 2. 3. … 번호를 직접 입력한 파일 (정답은 맨 끝 [정답] 목록)"
+    );
+
+  // ── 머리 문단(첫 문항 앞) → 문서 양식으로 보관
   const firstP = paras[starts[0]];
-  const tbl = findAll(xml, "hp:tbl", firstP.start, firstP.end)[0];
-  const sourceRaw = tbl ? findAll(xml, "hp:t", tbl.start, tbl.end).map((t) => textOf(xml, t)).join(" ").replace(/\s+/g, " ").trim() : "";
-  const sm = sourceRaw.match(/([A-Za-z][A-Za-z0-9 ]*?)\s*:\s*(\d+)\s*회/);
-  const sourceTitle = sm ? `${sm[1].trim()} ${sm[2]}회` : sourceRaw;
-  const headerTitleText = sm ? sm[0] : "";
+  const preamble = paras.slice(0, starts[0]).map((p) => slice(xml, p)).join("");
+  const hasSecPrInFirst = findAll(xml, "hp:secPr", firstP.start, firstP.end).length > 0;
+  const { shellRuns, pXml: firstPXml } = hasSecPrInFirst ? splitShell(xml, firstP) : { shellRuns: "", pXml: slice(xml, firstP) };
 
-  const { shellRuns, pXml: firstPXml } = splitShell(xml, firstP);
-  const ctx: Ctx = { borders: parseBorders(header), colW: columnWidthOf(shellRuns) };
+  // ── 출처
+  let sourceRaw = "";
+  let sourceTitle = "";
+  let headerTitleText = "";
+  const tbl = findAll(xml, "hp:tbl", firstP.start, firstP.end)[0];
+  if (problemStyleId && tbl) {
+    sourceRaw = findAll(xml, "hp:t", tbl.start, tbl.end).map((t) => textOf(xml, t)).join(" ").replace(/\s+/g, " ").trim();
+    const sm = sourceRaw.match(/([A-Za-z][A-Za-z0-9 ]*?)\s*:\s*(\d+)\s*회/);
+    sourceTitle = sm ? `${sm[1].trim()} ${sm[2]}회` : sourceRaw;
+    headerTitleText = sm ? sm[0] : "";
+  } else {
+    // 머리 문단(본문·머리말 포함)에서 "… N회"가 들어간 글자
+    const pre = paras.slice(0, starts[0]);
+    const texts = pre.flatMap((p) => findAll(xml, "hp:t", p.start, p.end).map((t) => textOf(xml, t))).filter((t) => t.trim());
+    sourceRaw = texts[0]?.replace(/\s+/g, " ").trim() ?? "";
+    const sm = sourceRaw.match(/^(.*?\d+\s*회)/);
+    sourceTitle = sm ? sm[1].trim() : sourceRaw;
+    if (sourceTitle) headerTitleText = [...new Set(texts.filter((t) => t.replace(/\s+/g, " ").includes(sourceTitle)))].join("\u0001");
+  }
+
+  const ctx: Ctx = { borders: parseBorders(header), colW: columnWidthOf(xml.slice(0, firstP.start) + shellRuns) };
 
   const problems: ParsedProblem[] = [];
   for (let n = 0; n < starts.length; n++) {
     const a = starts[n];
-    const z = n + 1 < starts.length ? starts[n + 1] : paras.length;
+    const z = n + 1 < starts.length ? starts[n + 1] : endIdx;
     let group = paras.slice(a, z);
     if (n + 1 === starts.length) while (group.length > 1 && isEmptyPara(xml, group[group.length - 1])) group = group.slice(0, -1);
 
@@ -280,9 +335,15 @@ export async function parseHwpx(buf: Buffer | Uint8Array | ArrayBuffer): Promise
       joined = wrap.slice(wRoot.openEnd, ctrl.start) + wrap.slice(ctrl.end, wRoot.closeStart);
     }
 
+    if (!answer && keyAnswers.has(n + 1)) answer = keyAnswers.get(n + 1)!;
+
     const pw = `<w>${joined}</w>`;
     const pr = children(pw, 0, pw.length)[0];
     const pps = inner(pw, pr).filter((x) => x.name === "hp:p");
+    const problemBlocks = toBlocks(pw, pps, ctx);
+    if (!problemStyleId) stripTypedNumber(problemBlocks); // 화면용: 직접 입력 번호("3. ")는 빼고 번호는 화면이 붙임
+    const allText = problemBlocks.map(blockText).join(" ");
+    const pm = [...allText.matchAll(/\[\s*(\d)\s*점\s*\]/g)].pop();
     problems.push({
       number: n + 1,
       answer,
@@ -290,8 +351,9 @@ export async function parseHwpx(buf: Buffer | Uint8Array | ArrayBuffer): Promise
       problemXmlWithSolution: fullXml,
       solutionXml,
       endNoteCtrlXml,
-      problemBlocks: toBlocks(pw, pps, ctx),
+      problemBlocks,
       solutionBlocks,
+      points: pm ? +pm[1] : null,
       images: findAll(pw, "hc:img", pr.openEnd, pr.closeStart).map((i) => i.attrs.binaryItemIDRef),
       solutionImages,
       equationCount: findAll(pw, "hp:equation", pr.openEnd, pr.closeStart).length,
@@ -308,7 +370,7 @@ export async function parseHwpx(buf: Buffer | Uint8Array | ArrayBuffer): Promise
     sourceRaw,
     headerTitleText,
     problemStyleId,
-    sectionHead: xml.slice(0, root.openEnd),
+    sectionHead: xml.slice(0, root.openEnd) + preamble,
     sectionTail: xml.slice(root.closeStart),
     shellRunsXml: shellRuns,
     columnWidth: ctx.colW,

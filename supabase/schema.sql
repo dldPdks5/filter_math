@@ -68,6 +68,7 @@ create table if not exists problems (
   solution_blocks jsonb not null,
   images          text[] not null default '{}',
   solution_images text[] not null default '{}',
+  points          smallint,                            -- 배점 (2, 3, 4 …)
   created_at      timestamptz not null default now(),
   unique (exam_id, number)
 );
