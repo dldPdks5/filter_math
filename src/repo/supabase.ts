@@ -3,7 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   Repo, Taxonomy, ExamRow, ExamInput, ProblemInput, ProblemRow, ProblemSummary, ProblemFilter, TagUpdate, ImageInput, matchFilter,
-  Worksheet, WorksheetInput,
+  Worksheet, WorksheetInput, StoredFile, BackupProblem, BackupTaxonomy, BackupExam, taxonomyToBackup,
 } from "./types";
 
 function wsFromRow(r: any): Worksheet {
@@ -75,7 +75,7 @@ export function supabaseRepo(sb: SupabaseClient): Repo {
     },
     async saveExam(exam: ExamInput, problems: ProblemInput[], file: Uint8Array, images: ImageInput[]) {
       const id = crypto.randomUUID();
-      const filePath = `${id}/original.hwpx`;
+      const filePath = `${id}/template.hwpx`; // 양식 파일 (그림·본문 제외)
       check(await sb.storage.from(BUCKET).upload(filePath, file, { contentType: "application/hwp+zip" }));
       for (const im of images) check(await sb.storage.from(BUCKET).upload(`${id}/${im.fileName}`, im.data, { contentType: im.mime }));
       check(
@@ -88,7 +88,7 @@ export function supabaseRepo(sb: SupabaseClient): Repo {
       );
       const rows = problems.map((p) => ({
         exam_id: id, number: p.number, answer: p.answer, problem_xml: p.problemXml, problem_xml_sol: p.problemXmlWithSolution,
-        solution_xml: p.solutionXml, problem_blocks: p.problemBlocks, solution_blocks: p.solutionBlocks, images: p.images,
+        solution_xml: p.solutionXml || null, problem_blocks: p.problemBlocks, solution_blocks: p.solutionBlocks, images: p.images,
         solution_images: p.solutionImages, ...(hasPoints ? { points: p.points } : {}),
       }));
       let ins = await sb.from("problems").insert(rows);
@@ -174,6 +174,114 @@ export function supabaseRepo(sb: SupabaseClient): Repo {
     },
     async deleteWorksheet(id) {
       check(await sb.from("worksheets").delete().eq("id", id));
+    },
+
+    // ── 저장 공간 관리·백업
+    async listFiles() {
+      const out: StoredFile[] = [];
+      const walk = async (prefix: string) => {
+        for (let offset = 0; ; offset += 1000) {
+          const items = check(await sb.storage.from(BUCKET).list(prefix, { limit: 1000, offset })) as any[];
+          for (const it of items) {
+            const full = prefix ? `${prefix}/${it.name}` : it.name;
+            if (it.id === null) await walk(full); // 폴더
+            else out.push({ path: full, size: Number(it.metadata?.size ?? 0) });
+          }
+          if (items.length < 1000) break;
+        }
+      };
+      await walk("");
+      return out;
+    },
+    async readFile(path) {
+      const blob = check(await sb.storage.from(BUCKET).download(path)) as Blob;
+      return new Uint8Array(await blob.arrayBuffer());
+    },
+    async writeFile(path, data, mime) {
+      check(await sb.storage.from(BUCKET).upload(path, data, { contentType: mime, upsert: true }));
+    },
+    async deleteFiles(paths) {
+      for (let i = 0; i < paths.length; i += 100) check(await sb.storage.from(BUCKET).remove(paths.slice(i, i + 100)));
+    },
+    examFilePath(examId, name) {
+      return `${examId}/${name}`;
+    },
+    async setExamFilePath(examId, path) {
+      check(await sb.from("exams").update({ file_path: path }).eq("id", examId));
+    },
+    async examImages(examId) {
+      const e: any = check(await sb.from("exams").select("image_files").eq("id", examId).single());
+      return Object.entries(e.image_files ?? {}).map(([binId, v]: [string, any]) => ({ binId, path: v.file, mime: v.mime }));
+    },
+    async countRedundantXml() {
+      const a = check(await sb.from("problems").select("id").neq("problem_xml", "")) as any[];
+      const b = check(await sb.from("problems").select("id").not("solution_xml", "is", null)) as any[];
+      return new Set([...a, ...b].map((r) => r.id)).size;
+    },
+    async clearRedundantXml() {
+      const n = await this.countRedundantXml();
+      check(await sb.from("problems").update({ problem_xml: "" }).neq("problem_xml", ""));
+      check(await sb.from("problems").update({ solution_xml: null }).not("solution_xml", "is", null));
+      return n;
+    },
+    async dumpProblems(examId) {
+      const { ref } = taxonomyToBackup(await this.getTaxonomy());
+      const rows = check(
+        await sb.from("problems").select(`id, number, answer, ${hasPoints ? "points, " : ""}main_unit, tag_status, problem_xml_sol, problem_blocks, solution_blocks, images, solution_images, problem_tags(tag_id)`).eq("exam_id", examId).order("number")
+      ) as any[];
+      return rows.map((r): BackupProblem => ({
+        id: r.id, number: r.number, answer: r.answer ?? "", points: r.points ?? null, mainUnit: r.main_unit, tagStatus: r.tag_status,
+        tags: (r.problem_tags ?? []).map((t: any) => ref.get(Number(t.tag_id))).filter(Boolean),
+        problemXmlWithSolution: r.problem_xml_sol, problemBlocks: r.problem_blocks, solutionBlocks: r.solution_blocks,
+        images: r.images ?? [], solutionImages: r.solution_images ?? [],
+      }));
+    },
+    async restoreTaxonomy(t: BackupTaxonomy) {
+      check(await sb.from("units").upsert(t.units, { onConflict: "key", ignoreDuplicates: true }));
+      check(await sb.from("sections").upsert(t.sections.map((x) => ({ unit_key: x.unitKey, key: x.key, name: x.name, sort: x.sort, verify: x.verify ?? null })), { onConflict: "unit_key,key", ignoreDuplicates: true }));
+      const secs = check(await sb.from("sections").select("id, unit_key, key")) as any[];
+      const secId = new Map(secs.map((x) => [`${x.unit_key}|${x.key}`, Number(x.id)]));
+      const tagRows = t.tags.map((g) => ({ section_id: secId.get(`${g.unitKey}|${g.sectionKey}`), name: g.name, sort: g.sort })).filter((g) => g.section_id);
+      for (let i = 0; i < tagRows.length; i += 500) check(await sb.from("tags").upsert(tagRows.slice(i, i + 500), { onConflict: "section_id,name", ignoreDuplicates: true }));
+      check(await sb.from("subjects").upsert(t.subjects.map((x) => ({ id: x.id, curriculum: x.curriculum, name: x.name, unit_keys: x.unitKeys, sort: x.sort })), { onConflict: "id", ignoreDuplicates: true }));
+    },
+    async restoreExam(e: BackupExam, filePath, images) {
+      const ex = check(await sb.from("exams").select("id").eq("id", e.id).maybeSingle());
+      if (ex) return;
+      check(
+        await sb.from("exams").insert({
+          id: e.id, title: e.title, curriculum: e.curriculum, source_raw: e.sourceRaw, header_title_text: e.headerTitleText,
+          problem_style_id: e.problemStyleId, section_head: e.sectionHead, section_tail: e.sectionTail, shell_runs_xml: e.shellRunsXml,
+          column_width: e.columnWidth, bin_data: e.binData, file_path: filePath, created_at: e.createdAt,
+          image_files: Object.fromEntries(images.map((im) => [im.binId, { file: im.path, mime: im.mime }])),
+        })
+      );
+    },
+    async restoreProblems(examId, problems) {
+      const { ref } = taxonomyToBackup(await this.getTaxonomy());
+      const byRef = new Map([...ref.entries()].map(([id, r]) => [r, id]));
+      const existing = new Set((check(await sb.from("problems").select("id").eq("exam_id", examId)) as any[]).map((r) => r.id));
+      const fresh = problems.filter((p) => !existing.has(p.id));
+      const missingTags: string[] = [];
+      if (fresh.length) {
+        const rows = fresh.map((p) => ({
+          id: p.id, exam_id: examId, number: p.number, answer: p.answer, main_unit: p.mainUnit, tag_status: p.tagStatus,
+          problem_xml: "", problem_xml_sol: p.problemXmlWithSolution, solution_xml: null, problem_blocks: p.problemBlocks,
+          solution_blocks: p.solutionBlocks, images: p.images, solution_images: p.solutionImages, ...(hasPoints ? { points: p.points } : {}),
+        }));
+        let ins = await sb.from("problems").insert(rows);
+        if (missingPoints(ins.error)) { hasPoints = false; ins = await sb.from("problems").insert(rows.map(({ points: _p, ...r }: any) => r)); }
+        check(ins);
+        const links = fresh.flatMap((p) => p.tags.map((r) => { const id = byRef.get(r); if (!id) missingTags.push(r); return id ? { problem_id: p.id, tag_id: id } : null; }).filter(Boolean));
+        if (links.length) check(await sb.from("problem_tags").insert(links as any[]));
+      }
+      return { added: fresh.length, missingTags };
+    },
+    async restoreWorksheet(w) {
+      const ex = check(await sb.from("worksheets").select("id").eq("id", w.id).maybeSingle());
+      if (ex) return false;
+      check(await sb.from("worksheets").insert({ id: w.id, title: w.title, problem_ids: w.problemIds, options: w.options, created_at: w.createdAt, updated_at: w.updatedAt }));
+      return true;
     },
   };
 }

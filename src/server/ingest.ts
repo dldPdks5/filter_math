@@ -2,6 +2,7 @@
 import "server-only";
 import JSZip from "jszip";
 import { parseHwpx } from "../hwpx/parse";
+import { makeTemplate } from "../hwpx/compose";
 import type { Curriculum, ImageInput, Repo } from "../repo/types";
 
 const MIME: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", bmp: "image/bmp", svg: "image/svg+xml", wmf: "image/wmf", emf: "image/emf" };
@@ -33,16 +34,16 @@ export async function ingestHwpx(repo: Repo, file: Uint8Array, opt: { curriculum
     exam.problems.map((p) => ({
       number: p.number,
       answer: p.answer,
-      problemXml: p.problemXml,
+      problemXml: "", // 용량 절약: 해설 없는 버전은 출력할 때 해설 포함본에서 만듦
       problemXmlWithSolution: p.problemXmlWithSolution,
-      solutionXml: p.solutionXml,
+      solutionXml: "", // 사용하지 않음 (해설은 problemXmlWithSolution·solutionBlocks에 있음)
       problemBlocks: p.problemBlocks,
       solutionBlocks: p.solutionBlocks,
       images: p.images,
       solutionImages: p.solutionImages,
       points: p.points,
     })),
-    file,
+    await makeTemplate(file), // 원본 대신 그림·본문을 뺀 양식 파일만 저장 (그림은 따로, 본문 조각은 DB에)
     images
   );
   return { id, title, count: exam.problems.length };

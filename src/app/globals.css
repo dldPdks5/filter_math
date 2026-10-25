@@ -248,3 +248,15 @@ details.unit > summary .cnt { margin-left: auto; font-size: 12px; font-weight: 5
 
 /* 저장한 학습지 목록 */
 .ws-actions { display: flex; gap: 8px; }
+
+/* ───────── 저장 공간·백업 ───────── */
+.settings { display: grid; gap: 14px; }
+.set-block { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; }
+.set-block h2 { font-size: 16px; margin: 0 0 8px; }
+.set-block p { margin: 6px 0 12px; }
+.meter { height: 10px; border-radius: 999px; background: var(--bg); overflow: hidden; border: 1px solid var(--rule); }
+.meter span { display: block; height: 100%; background: var(--pen); }
+.set-list { margin: 0 0 10px; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+.set-list small { display: block; color: var(--ink-3); font-size: 12px; word-break: break-all; }
+.del { color: var(--danger); font-weight: 600; margin-right: 4px; }
+.set-log { margin: 0; padding-left: 18px; font-size: 14px; display: grid; gap: 4px; }

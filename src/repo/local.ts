@@ -7,7 +7,7 @@ import taxJson from "../../data/taxonomy.json";
 import { taxonomyFromJson } from "./seed";
 import {
   Repo, Taxonomy, ExamRow, ExamInput, ProblemInput, ProblemRow, ProblemSummary, ProblemFilter, TagUpdate, ImageInput, TaxTag, matchFilter,
-  Worksheet, WorksheetInput,
+  Worksheet, WorksheetInput, StoredFile, BackupProblem, BackupTaxonomy, BackupExam, taxonomyToBackup,
 } from "./types";
 
 interface Db {
@@ -86,12 +86,12 @@ export const localRepo: Repo = {
       const id = crypto.randomUUID();
       const dir = path.join(ROOT, "files", id);
       await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(path.join(dir, "original.hwpx"), file);
+      await fs.writeFile(path.join(dir, "template.hwpx"), file);
       for (const im of images) {
         await fs.writeFile(path.join(dir, im.fileName), im.data);
         db.images[`${id}/${im.binId}`] = { file: path.join("files", id, im.fileName), mime: im.mime };
       }
-      db.exams.push({ ...exam, id, filePath: path.join("files", id, "original.hwpx"), createdAt: new Date().toISOString(), problemCount: problems.length });
+      db.exams.push({ ...exam, id, filePath: path.join("files", id, "template.hwpx"), createdAt: new Date().toISOString(), problemCount: problems.length });
       for (const p of problems) db.problems.push({ ...p, id: crypto.randomUUID(), examId: id, mainUnit: null, tagStatus: "draft", tagIds: [] });
       await save(db);
       return id;
@@ -160,6 +160,134 @@ export const localRepo: Repo = {
       const db = await load();
       db.worksheets = (db.worksheets ?? []).filter((w) => w.id !== id);
       await save(db);
+    });
+  },
+
+  // ── 저장 공간 관리·백업
+  async listFiles() {
+    const out: StoredFile[] = [];
+    const walk = async (rel: string) => {
+      let ents: import("node:fs").Dirent[] = [];
+      try { ents = await fs.readdir(path.join(ROOT, rel), { withFileTypes: true }); } catch { return; }
+      for (const e of ents) {
+        const r = path.join(rel, e.name);
+        if (e.isDirectory()) await walk(r);
+        else out.push({ path: r, size: (await fs.stat(path.join(ROOT, r))).size });
+      }
+    };
+    await walk("files");
+    return out;
+  },
+  async readFile(p) {
+    return new Uint8Array(await fs.readFile(path.join(ROOT, p)));
+  },
+  async writeFile(p, data) {
+    await fs.mkdir(path.dirname(path.join(ROOT, p)), { recursive: true });
+    await fs.writeFile(path.join(ROOT, p), data);
+  },
+  async deleteFiles(paths) {
+    for (const p of paths) {
+      if (!p.startsWith("files" + path.sep) && !p.startsWith("files/")) throw new Error("files 폴더 밖은 지울 수 없습니다");
+      await fs.rm(path.join(ROOT, p), { force: true });
+    }
+  },
+  examFilePath(examId, name) {
+    return path.join("files", examId, name);
+  },
+  setExamFilePath(examId, p) {
+    return serial(async () => {
+      const db = await load();
+      const e = db.exams.find((x) => x.id === examId);
+      if (e) e.filePath = p;
+      await save(db);
+    });
+  },
+  async examImages(examId) {
+    const db = await load();
+    return Object.entries(db.images)
+      .filter(([k]) => k.startsWith(examId + "/"))
+      .map(([k, v]) => ({ binId: k.slice(examId.length + 1), path: v.file, mime: v.mime }));
+  },
+  async countRedundantXml() {
+    return (await load()).problems.filter((p) => p.problemXml || p.solutionXml).length;
+  },
+  clearRedundantXml() {
+    return serial(async () => {
+      const db = await load();
+      let n = 0;
+      for (const p of db.problems) if (p.problemXml || p.solutionXml) { p.problemXml = ""; p.solutionXml = ""; n++; }
+      await save(db);
+      return n;
+    });
+  },
+  async dumpProblems(examId) {
+    const db = await load();
+    const { ref } = taxonomyToBackup(db.taxonomy);
+    return db.problems
+      .filter((p) => p.examId === examId)
+      .map((p): BackupProblem => ({
+        id: p.id, number: p.number, answer: p.answer, points: p.points ?? null, mainUnit: p.mainUnit, tagStatus: p.tagStatus,
+        tags: p.tagIds.map((t) => ref.get(t)).filter((x): x is string => !!x),
+        problemXmlWithSolution: p.problemXmlWithSolution, problemBlocks: p.problemBlocks, solutionBlocks: p.solutionBlocks,
+        images: p.images, solutionImages: p.solutionImages,
+      }));
+  },
+  restoreTaxonomy(t: BackupTaxonomy) {
+    return serial(async () => {
+      const db = await load();
+      const tx = db.taxonomy;
+      for (const u of t.units) if (!tx.units.some((x) => x.key === u.key)) tx.units.push(u);
+      for (const s of t.sections)
+        if (!tx.sections.some((x) => x.unitKey === s.unitKey && x.key === s.key))
+          tx.sections.push({ ...s, id: Math.max(0, ...tx.sections.map((x) => x.id)) + 1 });
+      for (const g of t.tags) {
+        const sec = tx.sections.find((x) => x.unitKey === g.unitKey && x.key === g.sectionKey);
+        if (sec && !tx.tags.some((x) => x.sectionId === sec.id && x.name === g.name))
+          tx.tags.push({ id: Math.max(0, ...tx.tags.map((x) => x.id)) + 1, sectionId: sec.id, name: g.name, sort: g.sort });
+      }
+      for (const sj of t.subjects) if (!tx.subjects.some((x) => x.id === sj.id)) tx.subjects.push(sj);
+      await save(db);
+    });
+  },
+  restoreExam(e: BackupExam, filePath, images) {
+    return serial(async () => {
+      const db = await load();
+      if (db.exams.some((x) => x.id === e.id)) return;
+      const { template: _t, images: _i, ...row } = e;
+      db.exams.push({ ...row, filePath, problemCount: 0 });
+      for (const im of images) db.images[`${e.id}/${im.binId}`] = { file: im.path, mime: im.mime };
+      await save(db);
+    });
+  },
+  restoreProblems(examId, problems) {
+    return serial(async () => {
+      const db = await load();
+      const { ref } = taxonomyToBackup(db.taxonomy);
+      const byRef = new Map([...ref.entries()].map(([id, r]) => [r, id]));
+      const missingTags: string[] = [];
+      let added = 0;
+      for (const p of problems) {
+        if (db.problems.some((x) => x.id === p.id)) continue;
+        const tagIds = p.tags.map((r) => { const id = byRef.get(r); if (!id) missingTags.push(r); return id; }).filter((x): x is number => !!x);
+        db.problems.push({
+          id: p.id, examId, number: p.number, answer: p.answer, points: p.points, mainUnit: p.mainUnit, tagStatus: p.tagStatus, tagIds,
+          problemXml: "", problemXmlWithSolution: p.problemXmlWithSolution, solutionXml: "", problemBlocks: p.problemBlocks,
+          solutionBlocks: p.solutionBlocks, images: p.images, solutionImages: p.solutionImages,
+        });
+        added++;
+      }
+      await save(db);
+      return { added, missingTags };
+    });
+  },
+  restoreWorksheet(w) {
+    return serial(async () => {
+      const db = await load();
+      db.worksheets ??= [];
+      if (db.worksheets.some((x) => x.id === w.id)) return false;
+      db.worksheets.push(w);
+      await save(db);
+      return true;
     });
   },
 };

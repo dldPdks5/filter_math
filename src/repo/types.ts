@@ -79,7 +79,7 @@ export interface Repo {
   addTag(sectionId: number, name: string): Promise<TaxTag>;
   listExams(): Promise<ExamRow[]>;
   getExam(id: string): Promise<ExamRow | null>;
-  saveExam(exam: ExamInput, problems: ProblemInput[], file: Uint8Array, images: ImageInput[]): Promise<string>;
+  saveExam(exam: ExamInput, problems: ProblemInput[], template: Uint8Array, images: ImageInput[]): Promise<string>; // template: 양식 HWPX
   listProblems(f: ProblemFilter): Promise<ProblemSummary[]>;
   getProblems(ids: string[]): Promise<ProblemRow[]>;
   setProblemTags(id: string, u: TagUpdate): Promise<void>;
@@ -89,6 +89,74 @@ export interface Repo {
   getWorksheet(id: string): Promise<Worksheet | null>;
   saveWorksheet(w: WorksheetInput): Promise<string>;
   deleteWorksheet(id: string): Promise<void>;
+
+  // ── 저장 공간 관리·백업용 (path는 저장소 고유 경로: Supabase는 버킷 안 경로, 로컬은 .data 기준 경로)
+  listFiles(): Promise<StoredFile[]>;
+  readFile(path: string): Promise<Uint8Array>;
+  writeFile(path: string, data: Uint8Array, mime: string): Promise<void>;
+  deleteFiles(paths: string[]): Promise<void>;
+  examFilePath(examId: string, name: string): string; // 회차 파일을 둘 경로
+  setExamFilePath(examId: string, path: string): Promise<void>;
+  examImages(examId: string): Promise<{ binId: string; path: string; mime: string }[]>;
+  countRedundantXml(): Promise<number>; // 지워도 되는 중복 XML이 남은 문항 수
+  clearRedundantXml(): Promise<number>;
+  dumpProblems(examId: string): Promise<BackupProblem[]>;
+  restoreTaxonomy(t: BackupTaxonomy): Promise<void>; // 없는 단원·중단원·개념만 추가
+  restoreExam(e: BackupExam, filePath: string, images: { binId: string; path: string; mime: string }[]): Promise<void>;
+  restoreProblems(examId: string, problems: BackupProblem[]): Promise<{ added: number; missingTags: string[] }>;
+  restoreWorksheet(w: Worksheet): Promise<boolean>; // 없을 때만 추가
+}
+
+export interface StoredFile { path: string; size: number }
+
+// ── 백업 파일 형식 (문항창고-백업.zip 안의 backup.json, problems/<회차id>.json)
+export interface BackupTaxonomy {
+  units: { key: string; name: string; sort: number }[];
+  sections: { unitKey: string; key: string; name: string; sort: number; verify?: string | null }[];
+  tags: { unitKey: string; sectionKey: string; name: string; sort: number }[];
+  subjects: TaxSubject[];
+}
+export interface BackupExam extends ExamInput { id: string; createdAt: string; template: string; images: { binId: string; file: string; mime: string }[] }
+export interface BackupProblem {
+  id: string;
+  number: number;
+  answer: string;
+  points: number | null;
+  mainUnit: string | null;
+  tagStatus: TagStatus;
+  tags: string[]; // "단원키|중단원키|개념 이름"
+  problemXmlWithSolution: string;
+  problemBlocks: Block[];
+  solutionBlocks: Block[];
+  images: string[];
+  solutionImages: string[];
+}
+export interface BackupFile {
+  format: "munhang-backup";
+  version: 1;
+  createdAt: string;
+  taxonomy: BackupTaxonomy;
+  exams: BackupExam[];
+  worksheets: Worksheet[];
+}
+
+/** 체계표 → 백업 형식, 태그 id → "단원|중단원키|이름" */
+export function taxonomyToBackup(t: Taxonomy): { tax: BackupTaxonomy; ref: Map<number, string> } {
+  const sec = new Map(t.sections.map((s) => [s.id, s]));
+  const ref = new Map<number, string>();
+  for (const g of t.tags) {
+    const s = sec.get(g.sectionId);
+    if (s) ref.set(g.id, `${s.unitKey}|${s.key}|${g.name}`);
+  }
+  return {
+    ref,
+    tax: {
+      units: t.units.map((u) => ({ key: u.key, name: u.name, sort: u.sort })),
+      sections: t.sections.map((s) => ({ unitKey: s.unitKey, key: s.key, name: s.name, sort: s.sort, verify: s.verify ?? null })),
+      tags: t.tags.filter((g) => sec.has(g.sectionId)).map((g) => ({ unitKey: sec.get(g.sectionId)!.unitKey, sectionKey: sec.get(g.sectionId)!.key, name: g.name, sort: g.sort })),
+      subjects: t.subjects,
+    },
+  };
 }
 
 /** 필터 공통 로직 (두 구현이 같이 사용) */

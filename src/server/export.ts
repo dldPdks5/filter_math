@@ -14,6 +14,7 @@ export async function buildHwpx(repo: Repo, problemIds: string[], title: string,
       return {
         key: id,
         file: await repo.getExamFile(id),
+        getBin: async (binId: string) => (await repo.getImage(id, binId))?.data ?? null,
         sectionHead: e.sectionHead,
         sectionTail: e.sectionTail,
         shellRunsXml: e.shellRunsXml,

@@ -30,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/worksheets">학습지</Link>
             <Link href="/">회차</Link>
             <Link href="/upload">업로드</Link>
+            <Link href="/settings">저장 공간·백업</Link>
           </nav>
           {local && <span className="mode" title="Supabase 연결 전 — 이 컴퓨터의 .data 폴더에 저장됩니다">로컬 테스트 모드</span>}
         </header>

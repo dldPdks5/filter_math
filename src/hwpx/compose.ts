@@ -12,7 +12,8 @@ import { children, inner, findAll, escapeXml } from "./xmlscan";
 
 export interface ComposeExam {
   key: string; // 회차 id
-  file: Uint8Array; // 원본 HWPX
+  file: Uint8Array; // 양식 HWPX(그림 뺀 것) 또는 원본 HWPX
+  getBin?: (binId: string) => Promise<Uint8Array | null>; // 그림 바이트 (양식 파일에 그림이 없을 때 사용)
   sectionHead: string;
   sectionTail: string;
   shellRunsXml: string;
@@ -23,7 +24,7 @@ export interface ComposeItem {
   examKey: string;
   number: number;
   answer: string;
-  problemXml: string;
+  problemXml: string; // 비어 있으면 problemXmlWithSolution에서 미주를 빼서 만듦
   problemXmlWithSolution: string;
   label: string; // 출처 표기, 예: "PinPoint Light 2회 8번"
 }
@@ -145,7 +146,7 @@ interface Doc {
 }
 
 /** 다른 회차의 header 목록을 바탕 문서에 이어 붙이고 Remap 반환 */
-function mergeHeader(base: Doc, srcHeader: string, srcHpf: string, srcZip: JSZip, srcProblemStyle: string, baseProblemStyle: string, out: Map<string, Uint8Array | Promise<Uint8Array>>, sameTemplate: boolean, usedBins: Set<string>): Remap {
+function mergeHeader(base: Doc, srcHeader: string, srcHpf: string, loadBin: (id: string, href: string) => Promise<Uint8Array | null>, srcProblemStyle: string, baseProblemStyle: string, out: Map<string, Uint8Array | Promise<Uint8Array | null>>, sameTemplate: boolean, usedBins: Set<string>): Remap {
   const r: Remap = { maps: {}, bin: new Map(), problemStyle: baseProblemStyle, problemParaPr: "" };
   const baseStyle = baseProblemStyle ? base.header.match(new RegExp(`<hh:style id="${baseProblemStyle}"[^>]*paraPrIDRef="(\\d+)"`)) : null;
   r.problemParaPr = baseStyle?.[1] ?? "0";
@@ -159,8 +160,7 @@ function mergeHeader(base: Doc, srcHeader: string, srcHpf: string, srcZip: JSZip
     let nid = `image${base.binCount}`;
     while (base.hpf.includes(`id="${nid}"`)) nid = `image${++base.binCount}`;
     r.bin.set(id, nid);
-    const f = srcZip.file(href);
-    if (f) out.set(`BinData/${nid}.${ext}`, f.async("uint8array"));
+    out.set(`BinData/${nid}.${ext}`, loadBin(id, href));
     base.hpf = base.hpf.replace("</opf:manifest>", `<opf:item id="${nid}" href="BinData/${nid}.${ext}" media-type="${mt}" isEmbeded="1"/></opf:manifest>`);
   }
   if (sameTemplate) return r; // 같은 양식: 번호 그대로
@@ -219,6 +219,28 @@ function mergeHeader(base: Doc, srcHeader: string, srcHpf: string, srcZip: JSZip
   return r;
 }
 
+/** 해설(미주) 컨트롤을 뺀 문항 XML */
+export function stripEndNotes(xml: string): string {
+  const wrap = `<w>${xml}</w>`;
+  const root = children(wrap, 0, wrap.length)[0];
+  const ctrls = findAll(wrap, "hp:ctrl", root.openEnd, root.closeStart).filter((c) => findAll(wrap, "hp:endNote", c.start, c.end).length > 0);
+  let out = wrap;
+  for (const c of ctrls.sort((a, b) => b.start - a.start)) out = out.slice(0, c.start) + out.slice(c.end);
+  return out.slice(root.openEnd, out.length - (wrap.length - root.closeStart));
+}
+
+/** 원본 HWPX → 양식 파일 (그림과 본문 구역을 뺀 것). 본문 조각은 DB에, 그림은 그림 저장소에 따로 있음 */
+export async function makeTemplate(original: Uint8Array): Promise<Uint8Array> {
+  const src = await JSZip.loadAsync(original);
+  const out = new JSZip();
+  for (const f of Object.values(src.files)) {
+    if (f.dir || f.name.startsWith("BinData/") || /^Contents\/section\d+\.xml$/.test(f.name)) continue;
+    const stored = f.name === "mimetype" || f.name === "version.xml";
+    out.file(f.name, await f.async("uint8array"), { compression: stored ? "STORE" : "DEFLATE", createFolders: false });
+  }
+  return out.generateAsync({ type: "uint8array", mimeType: "application/hwp+zip" });
+}
+
 function firstParaFix(pXml: string, shellRuns: string): string {
   const openEnd = pXml.indexOf(">") + 1;
   const open = pXml.slice(0, openEnd).replace(/columnBreak="1"/, 'columnBreak="0"').replace(/pageBreak="1"/, 'pageBreak="0"');
@@ -258,7 +280,26 @@ export async function composeWorksheet(exams: ComposeExam[], items: ComposeItem[
   };
   base.binCount = Math.max(0, ...[...base.hpf.matchAll(/id="image(\d+)"/g)].map((m) => +m[1]));
   const baseHeaderOriginal = base.header;
-  const extraFiles = new Map<string, Uint8Array | Promise<Uint8Array>>();
+  const extraFiles = new Map<string, Uint8Array | Promise<Uint8Array | null>>();
+  const xmlOf = (it: ComposeItem) => (opt.answers === "solutions" ? it.problemXmlWithSolution : it.problemXml || stripEndNotes(it.problemXmlWithSolution));
+  const loaderFor = (ex: ComposeExam, zip: JSZip) => async (id: string, href: string) => {
+    const f = zip.file(href);
+    if (f) return f.async("uint8array");
+    return ex.getBin ? ex.getBin(id) : null;
+  };
+
+  // 바탕 회차의 그림: 실제로 쓰는 것만 남김
+  const baseUsed = new Set<string>();
+  for (const src of [...items.filter((x) => x.examKey === baseExam.key).map(xmlOf), base.header])
+    for (const m of src.matchAll(/binaryItemIDRef="([^"]+)"/g)) baseUsed.add(m[1]);
+  const baseLoad = loaderFor(baseExam, baseZip);
+  const baseBinFiles = new Set<string>();
+  base.hpf = base.hpf.replace(/<opf:item id="([^"]+)" href="(BinData\/[^"]+)"[^>]*\/>/g, (w, id, href) => {
+    if (!baseUsed.has(id)) return "";
+    baseBinFiles.add(href);
+    extraFiles.set(href, baseLoad(id, href));
+    return w;
+  });
 
   // 회차별 Remap (바탕 회차는 그대로)
   const remaps = new Map<string, Remap | null>([[baseExam.key, null]]);
@@ -270,9 +311,9 @@ export async function composeWorksheet(exams: ComposeExam[], items: ComposeItem[
     const hpf = await z.file("Contents/content.hpf")!.async("string");
     const same = !opt.forceRemap && h === baseHeaderOriginal;
     const usedBins = new Set<string>();
-    const xmls = items.filter((x) => x.examKey === it.examKey).map((x) => (opt.answers === "solutions" ? x.problemXmlWithSolution : x.problemXml));
+    const xmls = items.filter((x) => x.examKey === it.examKey).map(xmlOf);
     for (const src of [...xmls, h]) for (const m of src.matchAll(/binaryItemIDRef="([^"]+)"/g)) usedBins.add(m[1]);
-    remaps.set(it.examKey, mergeHeader(base, h, hpf, z, ex.problemStyleId, baseExam.problemStyleId, extraFiles, same, usedBins));
+    remaps.set(it.examKey, mergeHeader(base, h, hpf, loaderFor(ex, z), ex.problemStyleId, baseExam.problemStyleId, extraFiles, same, usedBins));
   }
 
   // 바탕글 모양(출처·정답표용): 바탕 문서의 스타일 0
@@ -284,7 +325,7 @@ export async function composeWorksheet(exams: ComposeExam[], items: ComposeItem[
   const bodies = items.map((it, i) => {
     const k = i + 1;
     const ex = byKey.get(it.examKey)!;
-    let x = opt.answers === "solutions" ? it.problemXmlWithSolution : it.problemXml;
+    let x = xmlOf(it);
     const r = remaps.get(it.examKey);
     if (r) x = remapSection(x, r, ex.problemStyleId, plain, k);
     if (!ex.problemStyleId) {
@@ -333,17 +374,23 @@ export async function composeWorksheet(exams: ComposeExam[], items: ComposeItem[
   const prv = items.map((it, i) => `${i + 1}. ${it.label}`).join("\r\n");
 
   const out = new JSZip();
+  let wroteSection = false;
   for (const f of Object.values(baseZip.files)) {
-    if (f.dir || drop.has(f.name)) continue;
+    if (f.dir || drop.has(f.name) || f.name.startsWith("BinData/") || (/^Contents\/section\d+\.xml$/.test(f.name) && f.name !== "Contents/section0.xml")) continue;
     const stored = f.name === "mimetype" || f.name === "version.xml";
     const o = { compression: stored ? ("STORE" as const) : ("DEFLATE" as const), createFolders: false };
-    if (f.name === "Contents/section0.xml") out.file(f.name, section0, o);
+    if (f.name === "Contents/section0.xml") { out.file(f.name, section0, o); wroteSection = true; }
     else if (f.name === "Contents/content.hpf") out.file(f.name, hpf, o);
     else if (f.name === "Contents/header.xml") out.file(f.name, header, o);
     else if (f.name === "Preview/PrvText.txt") out.file(f.name, prv, o);
     else out.file(f.name, await f.async("uint8array"), o);
   }
-  for (const [name, data] of extraFiles) out.file(name, await data, { compression: "DEFLATE", createFolders: false });
+  if (!wroteSection) out.file("Contents/section0.xml", section0, { compression: "DEFLATE", createFolders: false });
+  for (const [name, data] of extraFiles) {
+    const bytes = await data;
+    if (!bytes) throw new Error(`그림 파일을 찾지 못했습니다 (${name})`);
+    out.file(name, bytes, { compression: "DEFLATE", createFolders: false });
+  }
   return out.generateAsync({ type: "uint8array", mimeType: "application/hwp+zip" });
 }
 

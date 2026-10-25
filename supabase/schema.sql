@@ -61,7 +61,7 @@ create table if not exists problems (
   answer          text,
   main_unit       text references units(key) on update cascade,
   tag_status      text not null default 'draft' check (tag_status in ('draft','confirmed')),
-  problem_xml     text not null,
+  problem_xml     text not null default '',            -- 비워 둠 (출력 때 problem_xml_sol에서 만듦)
   problem_xml_sol text not null,
   solution_xml    text,
   problem_blocks  jsonb not null,
@@ -125,3 +125,5 @@ drop policy if exists "exams_auth_update" on storage.objects;
 create policy "exams_auth_select" on storage.objects for select to authenticated using (bucket_id = 'exams');
 create policy "exams_auth_insert" on storage.objects for insert to authenticated with check (bucket_id = 'exams');
 create policy "exams_auth_update" on storage.objects for update to authenticated using (bucket_id = 'exams');
+drop policy if exists "exams_auth_delete" on storage.objects;
+create policy "exams_auth_delete" on storage.objects for delete to authenticated using (bucket_id = 'exams');

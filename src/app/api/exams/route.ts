@@ -19,13 +19,16 @@ export async function POST(req: Request) {
     let bytes: Uint8Array;
     let curriculum: string;
     let title = "";
+    let incomingPath = "";
     if ((req.headers.get("content-type") ?? "").includes("application/json")) {
       if (!supabaseEnabled()) return NextResponse.json({ error: "Supabase 모드가 아닙니다" }, { status: 400 });
       const body = await req.json();
       curriculum = body.curriculum;
       title = body.title ?? "";
       const sb = await supabaseServer();
-      const { data, error } = await sb.storage.from("exams").download(body.incomingPath);
+      incomingPath = String(body.incomingPath ?? "");
+      if (!/^incoming\/[\w-]+\.hwpx$/.test(incomingPath)) return NextResponse.json({ error: "잘못된 업로드 경로입니다" }, { status: 400 });
+      const { data, error } = await sb.storage.from("exams").download(incomingPath);
       if (error || !data) throw new Error("업로드한 파일을 찾지 못했습니다");
       bytes = new Uint8Array(await data.arrayBuffer());
     } else {
@@ -39,6 +42,11 @@ export async function POST(req: Request) {
     }
     if (curriculum !== "2015" && curriculum !== "2022") return NextResponse.json({ error: "교육과정을 선택해 주세요" }, { status: 400 });
     const result = await ingestHwpx(repo, bytes, { curriculum: curriculum as Curriculum, title });
+    if (incomingPath) {
+      // 업로드용 임시 사본 정리 (원본 파일은 대장님 컴퓨터에 있고, 필요한 내용은 이미 저장됨)
+      const sb = await supabaseServer();
+      await sb.storage.from("exams").remove([incomingPath]);
+    }
     return NextResponse.json(result);
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? String(e) }, { status: 500 });
