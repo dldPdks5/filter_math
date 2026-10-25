@@ -3,7 +3,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   Repo, Taxonomy, ExamRow, ExamInput, ProblemInput, ProblemRow, ProblemSummary, ProblemFilter, TagUpdate, ImageInput, matchFilter,
+  Worksheet, WorksheetInput,
 } from "./types";
+
+function wsFromRow(r: any): Worksheet {
+  return { id: r.id, title: r.title, problemIds: r.problem_ids ?? [], options: { answers: r.options?.answers ?? "none", showSource: !!r.options?.showSource }, createdAt: r.created_at, updatedAt: r.updated_at };
+}
 
 const BUCKET = "exams";
 
@@ -131,6 +136,25 @@ export function supabaseRepo(sb: SupabaseClient): Repo {
       const e: any = check(await sb.from("exams").select("file_path").eq("id", examId).single());
       const blob = check(await sb.storage.from(BUCKET).download(e.file_path)) as Blob;
       return new Uint8Array(await blob.arrayBuffer());
+    },
+    async listWorksheets() {
+      return (check(await sb.from("worksheets").select("*").order("updated_at", { ascending: false })) as any[]).map(wsFromRow);
+    },
+    async getWorksheet(id) {
+      const r = check(await sb.from("worksheets").select("*").eq("id", id).maybeSingle());
+      return r ? wsFromRow(r) : null;
+    },
+    async saveWorksheet(w: WorksheetInput) {
+      const row = { title: w.title, problem_ids: w.problemIds, options: w.options, updated_at: new Date().toISOString() };
+      if (w.id) {
+        check(await sb.from("worksheets").update(row).eq("id", w.id));
+        return w.id;
+      }
+      const r: any = check(await sb.from("worksheets").insert(row).select("id").single());
+      return r.id;
+    },
+    async deleteWorksheet(id) {
+      check(await sb.from("worksheets").delete().eq("id", id));
     },
   };
 }

@@ -65,6 +65,11 @@ export interface ProblemFilter {
 
 export interface TagUpdate { mainUnit: string | null; tagIds: number[]; tagStatus: TagStatus }
 
+export type AnswerMode = "none" | "key" | "solutions";
+export interface WorksheetOptions { answers: AnswerMode; showSource: boolean }
+export interface WorksheetInput { id?: string; title: string; problemIds: string[]; options: WorksheetOptions }
+export interface Worksheet extends WorksheetInput { id: string; createdAt: string; updatedAt: string }
+
 export interface Repo {
   mode: "local" | "supabase";
   getTaxonomy(): Promise<Taxonomy>;
@@ -77,6 +82,10 @@ export interface Repo {
   setProblemTags(id: string, u: TagUpdate): Promise<void>;
   getImage(examId: string, binId: string): Promise<{ data: Uint8Array; mime: string } | null>;
   getExamFile(examId: string): Promise<Uint8Array>;
+  listWorksheets(): Promise<Worksheet[]>;
+  getWorksheet(id: string): Promise<Worksheet | null>;
+  saveWorksheet(w: WorksheetInput): Promise<string>;
+  deleteWorksheet(id: string): Promise<void>;
 }
 
 /** 필터 공통 로직 (두 구현이 같이 사용) */

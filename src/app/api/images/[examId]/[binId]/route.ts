@@ -9,5 +9,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ examId:
   const { examId, binId } = await params;
   const im = await (await getRepo()).getImage(examId, binId);
   if (!im) return new Response("없음", { status: 404 });
-  return new Response(Buffer.from(im.data), { headers: { "content-type": im.mime, "cache-control": "private, max-age=86400" } });
+  return new Response(Buffer.from(im.data), { headers: { "content-type": im.mime, "cache-control": "private, max-age=31536000, immutable" } });
 }

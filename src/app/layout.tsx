@@ -26,6 +26,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             문항 창고<small>모의고사 문항 분류</small>
           </Link>
           <nav className="nav">
+            <Link href="/problems">문제 찾기</Link>
+            <Link href="/worksheets">학습지</Link>
             <Link href="/">회차</Link>
             <Link href="/upload">업로드</Link>
           </nav>

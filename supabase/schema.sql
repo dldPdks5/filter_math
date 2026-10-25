@@ -80,6 +80,18 @@ create table if not exists problem_tags (
 );
 create index if not exists problem_tags_tag_idx on problem_tags(tag_id);
 
+
+-- ───────── 학습지 (4단계) ─────────
+create table if not exists worksheets (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  problem_ids uuid[] not null default '{}',
+  options     jsonb not null default '{}',
+  created_by  uuid default auth.uid(),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
 -- ───────── 권한: 로그인한 사용자만 ─────────
 -- (Authentication → Sign In / Providers 에서 'Allow new users to sign up'을 꺼 두세요.
 --  그러면 대장님이 직접 만든 계정만 로그인할 수 있습니다.)
@@ -90,11 +102,12 @@ alter table subjects     enable row level security;
 alter table exams        enable row level security;
 alter table problems     enable row level security;
 alter table problem_tags enable row level security;
+alter table worksheets   enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['units','sections','tags','subjects','exams','problems','problem_tags'] loop
+  foreach t in array array['units','sections','tags','subjects','exams','problems','problem_tags','worksheets'] loop
     execute format('drop policy if exists "auth_all" on %I', t);
     execute format('create policy "auth_all" on %I for all to authenticated using (true) with check (true)', t);
   end loop;

@@ -7,6 +7,7 @@ import taxJson from "../../data/taxonomy.json";
 import { taxonomyFromJson } from "./seed";
 import {
   Repo, Taxonomy, ExamRow, ExamInput, ProblemInput, ProblemRow, ProblemSummary, ProblemFilter, TagUpdate, ImageInput, TaxTag, matchFilter,
+  Worksheet, WorksheetInput,
 } from "./types";
 
 interface Db {
@@ -14,6 +15,7 @@ interface Db {
   exams: ExamRow[];
   problems: (ProblemInput & { id: string; examId: string; mainUnit: string | null; tagStatus: "draft" | "confirmed"; tagIds: number[] })[];
   images: Record<string, { file: string; mime: string }>; // `${examId}/${binId}`
+  worksheets?: Worksheet[];
 }
 
 const ROOT = process.env.LOCAL_DATA_DIR ?? path.join(process.cwd(), ".data");
@@ -132,5 +134,31 @@ export const localRepo: Repo = {
     const e = db.exams.find((x) => x.id === examId);
     if (!e) throw new Error("회차를 찾을 수 없습니다");
     return new Uint8Array(await fs.readFile(path.join(ROOT, e.filePath)));
+  },
+  async listWorksheets() {
+    const db = await load();
+    return [...(db.worksheets ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  },
+  async getWorksheet(id) {
+    return (await load()).worksheets?.find((w) => w.id === id) ?? null;
+  },
+  saveWorksheet(w: WorksheetInput) {
+    return serial(async () => {
+      const db = await load();
+      db.worksheets ??= [];
+      const now = new Date().toISOString();
+      const ex = w.id ? db.worksheets.find((x) => x.id === w.id) : undefined;
+      if (ex) Object.assign(ex, { title: w.title, problemIds: w.problemIds, options: w.options, updatedAt: now });
+      else db.worksheets.push({ ...w, id: crypto.randomUUID(), createdAt: now, updatedAt: now } as Worksheet);
+      await save(db);
+      return ex?.id ?? db.worksheets[db.worksheets.length - 1].id;
+    });
+  },
+  deleteWorksheet(id) {
+    return serial(async () => {
+      const db = await load();
+      db.worksheets = (db.worksheets ?? []).filter((w) => w.id !== id);
+      await save(db);
+    });
   },
 };
