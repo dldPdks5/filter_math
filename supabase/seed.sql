@@ -1,5 +1,5 @@
 -- 자동 생성: npx tsx scripts/make-seed-sql.ts
--- 체계표 version 2 (2026-10-24)
+-- 체계표 version 3 (2026-10-25)
 begin;
 insert into subjects (id, curriculum, name, unit_keys, sort) values ('2015-math1', '2015', '수학Ⅰ(공통)', array['EXPLOG','TRIG','SEQ'], 0) on conflict (id) do update set name = excluded.name, unit_keys = excluded.unit_keys;
 insert into subjects (id, curriculum, name, unit_keys, sort) values ('2015-math2', '2015', '수학Ⅱ(공통)', array['LIMIT','DIFF','INTEG'], 1) on conflict (id) do update set name = excluded.name, unit_keys = excluded.unit_keys;
@@ -85,6 +85,7 @@ insert into tags (section_id, name, sort) select id, '일반항', 0 from section
 insert into tags (section_id, name, sort) select id, '등비중항', 1 from sections where unit_key = 'SEQ' and key = 'geom' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '합', 2 from sections where unit_key = 'SEQ' and key = 'geom' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '활용', 3 from sections where unit_key = 'SEQ' and key = 'geom' on conflict (section_id, name) do nothing;
+insert into tags (section_id, name, sort) select id, '등비수열 판정(이웃 항의 비가 일정)', 4 from sections where unit_key = 'SEQ' and key = 'geom' on conflict (section_id, name) do nothing;
 insert into sections (unit_key, key, name, sort, verify) values ('SEQ', 'sigma', '∑', 2, null) on conflict (unit_key, key) do update set name = excluded.name, verify = excluded.verify;
 insert into tags (section_id, name, sort) select id, '∑의 성질', 0 from sections where unit_key = 'SEQ' and key = 'sigma' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '자연수 거듭제곱의 합', 1 from sections where unit_key = 'SEQ' and key = 'sigma' on conflict (section_id, name) do nothing;
@@ -110,6 +111,7 @@ insert into tags (section_id, name, sort) select id, '다항함수 결정', 5 fr
 insert into tags (section_id, name, sort) select id, '대소 관계(조임)', 6 from sections where unit_key = 'LIMIT' and key = 'lim' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '합성함수의 극한', 7 from sections where unit_key = 'LIMIT' and key = 'lim' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '치환 극한', 8 from sections where unit_key = 'LIMIT' and key = 'lim' on conflict (section_id, name) do nothing;
+insert into tags (section_id, name, sort) select id, '부호 판단 극한(f/|f| 꼴)', 9 from sections where unit_key = 'LIMIT' and key = 'lim' on conflict (section_id, name) do nothing;
 insert into sections (unit_key, key, name, sort, verify) values ('LIMIT', 'cont', '연속', 1, '사잇값 정리 2022 포함 여부 확인 필요') on conflict (unit_key, key) do update set name = excluded.name, verify = excluded.verify;
 insert into tags (section_id, name, sort) select id, '연속의 정의', 0 from sections where unit_key = 'LIMIT' and key = 'cont' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '구간별 정의 함수의 연속', 1 from sections where unit_key = 'LIMIT' and key = 'cont' on conflict (section_id, name) do nothing;
@@ -250,6 +252,7 @@ insert into tags (section_id, name, sort) select id, '역함수', 1 from section
 insert into tags (section_id, name, sort) select id, '구간별 정의 함수', 2 from sections where unit_key = 'TOOL' and key = 'fn' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, 'f(x+p)=f(x)+c 꼴', 3 from sections where unit_key = 'TOOL' and key = 'fn' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '평행·대칭이동', 4 from sections where unit_key = 'TOOL' and key = 'fn' on conflict (section_id, name) do nothing;
+insert into tags (section_id, name, sort) select id, '함수의 치역(값의 범위)', 5 from sections where unit_key = 'TOOL' and key = 'fn' on conflict (section_id, name) do nothing;
 insert into sections (unit_key, key, name, sort, verify) values ('TOOL', 'geo', '도형', 2, null) on conflict (unit_key, key) do update set name = excluded.name, verify = excluded.verify;
 insert into tags (section_id, name, sort) select id, '두 점 사이 거리', 0 from sections where unit_key = 'TOOL' and key = 'geo' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '직선의 방정식', 1 from sections where unit_key = 'TOOL' and key = 'geo' on conflict (section_id, name) do nothing;
@@ -264,6 +267,7 @@ insert into tags (section_id, name, sort) select id, '경우 나누기(짝·홀 
 insert into tags (section_id, name, sort) select id, '그래프 개형 추론', 1 from sections where unit_key = 'TOOL' and key = 'strategy' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '귀류법', 2 from sections where unit_key = 'TOOL' and key = 'strategy' on conflict (section_id, name) do nothing;
 insert into tags (section_id, name, sort) select id, '〈보기〉 ㄱㄴㄷ 판별', 3 from sections where unit_key = 'TOOL' and key = 'strategy' on conflict (section_id, name) do nothing;
+insert into tags (section_id, name, sort) select id, '빈칸 채우기(풀이 과정 추론)', 4 from sections where unit_key = 'TOOL' and key = 'strategy' on conflict (section_id, name) do nothing;
 insert into sections (unit_key, key, name, sort, verify) values ('TOOL', 'answer', '답 형식', 4, null) on conflict (unit_key, key) do update set name = excluded.name, verify = excluded.verify;
 insert into tags (section_id, name, sort) select id, '서로소 p+q 꼴', 0 from sections where unit_key = 'TOOL' and key = 'answer' on conflict (section_id, name) do nothing;
 commit;

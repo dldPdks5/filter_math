@@ -1,0 +1,220 @@
+{
+ "source": "OMEGA 15회",
+ "status": "초안 — 대장 검토 전",
+ "problems": [
+  {
+   "number": 1,
+   "mainUnit": "EXPLOG",
+   "tags": [
+    "EXPLOG|로그|로그의 정의",
+    "EXPLOG|로그|로그의 성질",
+    "EXPLOG|지수|지수법칙 계산"
+   ]
+  },
+  {
+   "number": 2,
+   "mainUnit": "DIFF",
+   "tags": [
+    "DIFF|도함수|다항함수 미분법",
+    "DIFF|접선|접점이 주어진 접선",
+    "DIFF|미분계수|미분계수의 정의"
+   ]
+  },
+  {
+   "number": 3,
+   "mainUnit": "TRIG",
+   "tags": [
+    "TRIG|정의·성질|단위원 정의",
+    "TRIG|정의·성질|사분면별 부호",
+    "TRIG|정의·성질|sin²+cos²=1, tan=sin/cos",
+    "TRIG|정의·성질|값 계산"
+   ]
+  },
+  {
+   "number": 4,
+   "mainUnit": "LIMIT",
+   "tags": [
+    "LIMIT|극한|좌극한·우극한",
+    "LIMIT|극한|치환 극한",
+    "LIMIT|극한|극한의 성질",
+    "TOOL|함수|구간별 정의 함수"
+   ]
+  },
+  {
+   "number": 5,
+   "mainUnit": "DIFF",
+   "tags": [
+    "DIFF|미분계수|구간별 함수의 미분가능성",
+    "DIFF|미분계수|미분가능성과 연속성",
+    "DIFF|미분계수|미분계수의 정의",
+    "LIMIT|연속|구간별 정의 함수의 연속",
+    "DIFF|도함수|다항함수 미분법",
+    "TOOL|대수|연립방정식"
+   ]
+  },
+  {
+   "number": 6,
+   "mainUnit": "SEQ",
+   "tags": [
+    "SEQ|등차수열|일반항",
+    "SEQ|등차수열|등차중항",
+    "SEQ|∑|∑의 성질",
+    "TOOL|대수|인수분해"
+   ]
+  },
+  {
+   "number": 7,
+   "mainUnit": "INTEG",
+   "tags": [
+    "INTEG|정적분|우함수·기함수",
+    "INTEG|정적분|정의·계산"
+   ]
+  },
+  {
+   "number": 8,
+   "mainUnit": "TRIG",
+   "tags": [
+    "TRIG|정의·성질|sin²+cos²=1, tan=sin/cos",
+    "TRIG|정의·성질|사분면별 부호",
+    "TRIG|사인·코사인법칙|코사인법칙",
+    "TRIG|사인·코사인법칙|도형 활용",
+    "TOOL|도형|점과 직선 사이 거리"
+   ]
+  },
+  {
+   "number": 9,
+   "mainUnit": "INTEG",
+   "tags": [
+    "INTEG|넓이|곡선과 x축",
+    "INTEG|정적분|정의·계산",
+    "INTEG|정적분|성질(구간 분할·상수배)",
+    "TOOL|대수|인수분해"
+   ]
+  },
+  {
+   "number": 10,
+   "mainUnit": "EXPLOG",
+   "tags": [
+    "EXPLOG|지수|지수의 확장(정수·유리수·실수)",
+    "EXPLOG|지수|거듭제곱근의 성질",
+    "EXPLOG|지수|지수법칙 계산",
+    "TOOL|도형|직선의 방정식",
+    "TOOL|도형|삼각형 넓이",
+    "TOOL|대수|인수분해"
+   ]
+  },
+  {
+   "number": 11,
+   "mainUnit": "DIFF",
+   "tags": [
+    "DIFF|극대·극소|극값 구하기",
+    "DIFF|증가·감소|증감표",
+    "DIFF|그래프|삼차함수 개형",
+    "DIFF|그래프|구간별 함수 그래프",
+    "TOOL|함수|함수의 치역(값의 범위)",
+    "TOOL|풀이 전략|그래프 개형 추론"
+   ]
+  },
+  {
+   "number": 12,
+   "mainUnit": "SEQ",
+   "tags": [
+    "SEQ|등차수열|등차중항",
+    "SEQ|등차수열|일반항",
+    "SEQ|등비수열|일반항",
+    "SEQ|등비수열|등비수열 판정(이웃 항의 비가 일정)",
+    "TOOL|대수|연립방정식"
+   ]
+  },
+  {
+   "number": 13,
+   "mainUnit": "LIMIT",
+   "tags": [
+    "LIMIT|연속|연속의 정의",
+    "LIMIT|연속|구간별 정의 함수의 연속",
+    "LIMIT|극한|부호 판단 극한(f/|f| 꼴)",
+    "LIMIT|극한|0/0·∞/∞·∞−∞ 꼴",
+    "LIMIT|극한|미정계수 결정",
+    "DIFF|그래프|조건으로 함수 추론",
+    "TOOL|풀이 전략|경우 나누기(짝·홀 등)"
+   ]
+  },
+  {
+   "number": 14,
+   "mainUnit": "TRIG",
+   "tags": [
+    "TRIG|그래프|sin·cos·tan 그래프",
+    "TRIG|그래프|대칭성",
+    "TRIG|그래프|교점 개수",
+    "TRIG|그래프|최댓값·최솟값",
+    "TOOL|풀이 전략|경우 나누기(짝·홀 등)",
+    "TOOL|풀이 전략|그래프 개형 추론"
+   ]
+  },
+  {
+   "number": 15,
+   "mainUnit": "INTEG",
+   "tags": [
+    "INTEG|정적분으로 정의된 함수|미분해서 함수 결정",
+    "INTEG|정적분으로 정의된 함수|극값",
+    "DIFF|증가·감소|증감 판정",
+    "DIFF|그래프|조건으로 함수 추론",
+    "TOOL|대수|절댓값",
+    "TOOL|풀이 전략|그래프 개형 추론"
+   ]
+  },
+  {
+   "number": 16,
+   "mainUnit": "EXPLOG",
+   "tags": [
+    "EXPLOG|방정식·부등식|로그방정식",
+    "EXPLOG|로그|밑·진수 조건",
+    "EXPLOG|로그|로그의 성질",
+    "EXPLOG|로그함수|지수·로그 그래프 교점",
+    "TOOL|대수|인수분해"
+   ]
+  },
+  {
+   "number": 17,
+   "mainUnit": "INTEG",
+   "tags": [
+    "INTEG|부정적분|도함수로 함수 결정",
+    "INTEG|부정적분|다항함수 부정적분",
+    "DIFF|접선|접점이 주어진 접선"
+   ]
+  },
+  {
+   "number": 18,
+   "mainUnit": "SEQ",
+   "tags": [
+    "SEQ|∑|∑의 성질",
+    "SEQ|∑|첨자 바꾸기·뒤집기",
+    "TOOL|대수|연립방정식"
+   ]
+  },
+  {
+   "number": 19,
+   "mainUnit": "INTEG",
+   "tags": [
+    "INTEG|속도와 거리|위치",
+    "INTEG|속도와 거리|위치의 변화량",
+    "DIFF|속도·가속도|속도",
+    "DIFF|극대·극소|극값 구하기",
+    "DIFF|방정식·부등식|항상 성립하는 부등식"
+   ]
+  },
+  {
+   "number": 20,
+   "mainUnit": "SEQ",
+   "tags": [
+    "SEQ|귀납적 정의|점화식 해석",
+    "SEQ|귀납적 정의|조건 분기(홀짝) 점화식",
+    "SEQ|등비수열|일반항",
+    "SEQ|∑|여러 가지 수열의 합",
+    "TRIG|정의·성질|값 계산",
+    "TOOL|풀이 전략|빈칸 채우기(풀이 과정 추론)",
+    "TOOL|풀이 전략|경우 나누기(짝·홀 등)"
+   ]
+  }
+ ]
+}
