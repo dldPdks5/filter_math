@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Taxonomy, TaxTag, TagStatus } from "@/repo/types";
+import ProblemEditor from "./ProblemEditor";
+import DeleteExam from "../../DeleteExam";
 
 export interface ClientProblem {
   id: string;
@@ -20,21 +22,30 @@ export default function TaggingClient({
   exam,
   problems: initial,
   taxonomy: initialTax,
+  focusId,
+  worksheetCount,
 }: {
   exam: { id: string; title: string; curriculum: string };
   problems: ClientProblem[];
   taxonomy: Taxonomy;
+  focusId?: string; // 처음 열 문항 (수정 후 다시 불러올 때)
+  worksheetCount: number; // 이 회차 문항이 들어간 저장 학습지 수 (삭제 확인 창용)
 }) {
   const [problems, setProblems] = useState(initial);
   const [tax, setTax] = useState(initialTax);
-  const [cur, setCur] = useState(0);
+  const [cur, setCur] = useState(() => Math.max(0, initial.findIndex((x) => x.id === focusId)));
+  const [editing, setEditing] = useState(false);
   const [showSol, setShowSol] = useState(false);
   const [q, setQ] = useState("");
   const [save, setSave] = useState<SaveState>("idle");
+  const saveRef = useRef<SaveState>("idle");
+  saveRef.current = save;
   const [adding, setAdding] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const editingRef = useRef(false);
+  editingRef.current = editing;
   const fileRef = useRef<HTMLInputElement>(null);
 
   const p = problems[cur];
@@ -115,7 +126,8 @@ export default function TaggingClient({
   // 키보드: ↑↓ 또는 j/k 로 문항 이동
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest("input, select, textarea")) return;
+      if ((e.target as HTMLElement).closest("input, select, textarea, dialog")) return;
+      if (editingRef.current) return;
       if (e.key === "ArrowDown" || e.key === "j") { setCur((c) => Math.min(problems.length - 1, c + 1)); e.preventDefault(); }
       if (e.key === "ArrowUp" || e.key === "k") { setCur((c) => Math.max(0, c - 1)); e.preventDefault(); }
     };
@@ -123,7 +135,14 @@ export default function TaggingClient({
     return () => window.removeEventListener("keydown", on);
   }, [problems.length]);
 
-  useEffect(() => { setShowSol(false); setAdding(null); }, [cur]);
+  useEffect(() => { setShowSol(false); setAdding(null); setEditing(false); }, [cur]);
+
+  // 수정·나누기·합치기 뒤: 태그 저장이 끝나기를 기다렸다가 그 문항을 연 채로 다시 불러옴
+  const reloadAt = (id: string) => {
+    const go = () => { location.href = `${location.pathname}?p=${encodeURIComponent(id)}`; };
+    const wait = () => (saveRef.current === "saving" ? setTimeout(wait, 200) : go());
+    wait();
+  };
 
   if (!p) return <main className="page"><p className="empty">이 회차에는 문항이 없습니다.</p></main>;
 
@@ -143,6 +162,18 @@ export default function TaggingClient({
             <span className={`dot ${x.tagStatus === "confirmed" ? "confirmed" : x.tagIds.length ? "draft" : ""}`} title={x.tagStatus === "confirmed" ? "확정" : x.tagIds.length ? "태그 있음(초안)" : "태그 없음"} />
           </button>
         ))}
+        <div className="qlist-foot">
+          <DeleteExam
+            id={exam.id}
+            title={exam.title}
+            total={problems.length}
+            confirmed={done}
+            worksheets={worksheetCount}
+            after="home"
+            className="btn ghost-danger"
+            label="이 회차 삭제"
+          />
+        </div>
       </aside>
 
       <section className="stage">
@@ -156,16 +187,33 @@ export default function TaggingClient({
               {[2, 3, 4].map((n) => <option key={n} value={n}>{n}점</option>)}
             </select>
           </label>
-          <div className="seg sw" role="group" aria-label="보기 전환">
-            <button aria-pressed={!showSol} onClick={() => setShowSol(false)}>문제</button>
-            <button aria-pressed={showSol} onClick={() => setShowSol(true)}>문제 + 해설</button>
-          </div>
+          {!editing && (
+            <div className="seg sw" role="group" aria-label="보기 전환">
+              <button aria-pressed={!showSol} onClick={() => setShowSol(false)}>문제</button>
+              <button aria-pressed={showSol} onClick={() => setShowSol(true)}>문제 + 해설</button>
+            </div>
+          )}
+          <button className="btn edit-toggle" style={editing ? { marginLeft: "auto" } : undefined} aria-pressed={editing} onClick={() => setEditing((v) => !v)}>
+            {editing ? "수정 닫기" : "문제 수정"}
+          </button>
         </div>
-        <article className="sheet">
-          <span className="qno">{p.number}.</span>
-          <div dangerouslySetInnerHTML={{ __html: p.problemHtml }} />
-        </article>
-        {showSol && <article className="sheet solution" dangerouslySetInnerHTML={{ __html: p.solutionHtml }} />}
+        {editing ? (
+          <ProblemEditor
+            key={p.id}
+            problemId={p.id}
+            nextNumber={problems[cur + 1]?.number ?? null}
+            onDone={reloadAt}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <>
+            <article className="sheet">
+              <span className="qno">{p.number}.</span>
+              <div dangerouslySetInnerHTML={{ __html: p.problemHtml }} />
+            </article>
+            {showSol && <article className="sheet solution" dangerouslySetInnerHTML={{ __html: p.solutionHtml }} />}
+          </>
+        )}
       </section>
 
       <aside className="tagpanel" aria-label="태그">

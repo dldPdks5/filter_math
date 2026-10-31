@@ -45,7 +45,7 @@ export interface ParsedExam {
   binData: Record<string, { path: string; mediaType: string }>;
 }
 
-interface Ctx {
+export interface Ctx {
   borders: Record<string, string>; // borderFill id → "LRTB"
   colW: number;
 }
@@ -73,7 +73,7 @@ function firstAttr(xml: string, name: string, s: Span): Record<string, string> {
 }
 
 /** 문단 범위 → Block 목록 */
-function toBlocks(xml: string, paras: Span[], ctx: Ctx): Block[] {
+export function toBlocks(xml: string, paras: Span[], ctx: Ctx): Block[] {
   const blocks: Block[] = [];
   const doPara = (p: Span) => {
     const b: Block = [];
@@ -146,7 +146,7 @@ function toBlocks(xml: string, paras: Span[], ctx: Ctx): Block[] {
 }
 
 /** 첫 글자 조각의 "3. " 같은 직접 입력 번호 제거 (형식 B 화면용) */
-function stripTypedNumber(blocks: Block[]) {
+export function stripTypedNumber(blocks: Block[]) {
   for (const b of blocks) {
     const i = b.findIndex((x) => x.k !== "t" || x.v.trim());
     if (i < 0) continue;
@@ -195,7 +195,7 @@ function splitShell(xml: string, p: Span): { shellRuns: string; pXml: string } {
   return { shellRuns: shell.join(""), pXml: pOpen + rest.join("") + "</hp:p>" };
 }
 
-function parseBorders(header: string): Record<string, string> {
+export function parseBorders(header: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const m of header.matchAll(/<hh:borderFill id="(\d+)"[^>]*>([\s\S]*?)<\/hh:borderFill>/g)) {
     const side = (n: string) => {

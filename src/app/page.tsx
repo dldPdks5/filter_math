@@ -1,15 +1,22 @@
 import Link from "next/link";
 import { getRepo } from "@/repo";
+import DeleteExam from "./DeleteExam";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const repo = await getRepo();
   const exams = await repo.listExams();
-  const all = await repo.listProblems({});
+  const [all, worksheets] = await Promise.all([repo.listProblems({}), repo.listWorksheets()]);
   const stat = (id: string) => {
     const ps = all.filter((p) => p.examId === id);
-    return { total: ps.length, done: ps.filter((p) => p.tagStatus === "confirmed").length, tagged: ps.filter((p) => p.tagIds.length > 0).length };
+    const ids = new Set(ps.map((p) => p.id));
+    return {
+      total: ps.length,
+      done: ps.filter((p) => p.tagStatus === "confirmed").length,
+      tagged: ps.filter((p) => p.tagIds.length > 0).length,
+      worksheets: worksheets.filter((w) => w.problemIds.some((x) => ids.has(x))).length,
+    };
   };
   return (
     <main className="page">
@@ -42,7 +49,10 @@ export default async function Home() {
                 <div className="progress">
                   태그 {s.tagged}/{s.total}, 확정 {s.done}/{s.total}
                 </div>
-                <Link href={`/exams/${e.id}`} className="btn">태깅하기</Link>
+                <div className="ws-actions">
+                  <Link href={`/exams/${e.id}`} className="btn">태깅하기</Link>
+                  <DeleteExam id={e.id} title={e.title} total={s.total} confirmed={s.done} worksheets={s.worksheets} className="btn ghost-danger" />
+                </div>
               </li>
             );
           })}

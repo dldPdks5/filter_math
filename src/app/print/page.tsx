@@ -27,6 +27,7 @@ export default async function PrintPage({ searchParams }: { searchParams: Promis
       <div className="print-bar">
         <strong>{title}</strong>
         <span>{problems.length}문제 / A3 세로 2단</span>
+        {problems.length < ids.length && <span style={{ color: "var(--danger)" }}>삭제된 문항 {ids.length - problems.length}개가 빠졌습니다</span>}
         <PrintButton />
         <p>인쇄 창에서 대상을 <b>PDF로 저장</b>, 용지 <b>A3</b>, 배율 <b>기본(100%)</b>, 여백 <b>기본</b>으로 고르세요.</p>
       </div>

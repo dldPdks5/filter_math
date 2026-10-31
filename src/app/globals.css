@@ -88,7 +88,7 @@ h1 { font-size: 22px; letter-spacing: -0.02em; margin: 0 0 6px; }
 
 /* 회차 목록 */
 .exam-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--rule); }
-.exam-list li { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center; padding: 14px 4px; border-bottom: 1px solid var(--rule); }
+.exam-list > li { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center; padding: 14px 4px; border-bottom: 1px solid var(--rule); }
 .exam-list .t { font-weight: 600; }
 .exam-list .m { color: var(--ink-3); font-size: 13px; }
 .progress { font-size: 13px; color: var(--ink-2); min-width: 120px; text-align: right; }
@@ -173,7 +173,7 @@ details.unit > summary .cnt { margin-left: auto; font-size: 12px; font-weight: 5
   .qitem .u { display: none; }
   .stage { padding: 16px; }
   .sheet { padding: 20px 18px; }
-  .exam-list li { grid-template-columns: 1fr; gap: 4px; }
+  .exam-list > li { grid-template-columns: 1fr; gap: 4px; }
   .progress { text-align: left; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -260,3 +260,46 @@ details.unit > summary .cnt { margin-left: auto; font-size: 12px; font-weight: 5
 .set-list small { display: block; color: var(--ink-3); font-size: 12px; word-break: break-all; }
 .del { color: var(--danger); font-weight: 600; margin-right: 4px; }
 .set-log { margin: 0; padding-left: 18px; font-size: 14px; display: grid; gap: 4px; }
+
+/* ───────── 회차 삭제 확인 창 ───────── */
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger:hover { filter: brightness(1.08); }
+.btn.ghost-danger { color: var(--danger); }
+.btn.ghost-danger:hover { border-color: var(--danger); }
+dialog.confirm { border: 1px solid var(--rule); border-radius: 12px; padding: 22px 24px; width: min(460px, calc(100vw - 32px)); background: var(--surface); color: var(--ink); box-shadow: 0 12px 40px rgba(0, 0, 0, .25); }
+dialog.confirm::backdrop { background: rgba(12, 16, 22, .45); }
+dialog.confirm h2 { font-size: 17px; margin: 0 0 6px; }
+dialog.confirm .what { margin: 0 0 10px; }
+dialog.confirm ul { margin: 0 0 16px; padding-left: 18px; display: grid; gap: 5px; font-size: 14px; color: var(--ink-2); }
+dialog.confirm .warn { color: var(--danger); }
+dialog.confirm .field { margin-bottom: 12px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.qlist-foot { margin: 14px 8px 4px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.qlist-foot .btn { font-size: 12px; padding: 4px 10px; }
+@media (max-width: 700px) { .qlist-foot { display: none; } }
+
+/* ───────── 문제 수정 ───────── */
+.edit-toggle { margin-left: 8px; }
+.editor { width: 100%; max-width: 520px; display: grid; gap: 14px; }
+.ed-meta { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; }
+.ed-meta label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.ed-meta input, .ed-meta select { width: auto; padding: 4px 8px; font-size: 14px; }
+.ed-meta input[type="number"] { width: 64px; }
+.ed-meta input.ans-in { width: 90px; }
+.ed-part { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px 14px; }
+.ed-part > h3 { font-size: 13px; color: var(--ink-2); margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; }
+.ed-part > h3 small { font-weight: 400; color: var(--ink-3); }
+.ed-para { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; padding: 8px 0; border-top: 1px dashed var(--rule); }
+.ed-para:first-of-type { border-top: 0; }
+.ed-para .tag-tbl { font-size: 11px; color: var(--ink-3); border: 1px solid var(--rule); border-radius: 4px; padding: 0 4px; align-self: center; }
+.ed-t { font: 15px/1.5 var(--serif); border: 1px solid var(--rule); border-radius: 6px; padding: 3px 7px; background: var(--paper); color: #16191f; field-sizing: content; min-width: 3ch; max-width: 100%; }
+.ed-eq { display: grid; gap: 3px; max-width: 100%; }
+.ed-eq textarea { font: 13px/1.4 ui-monospace, "D2Coding", Consolas, monospace; border: 1px solid var(--pen); border-radius: 6px; padding: 3px 7px; background: var(--pen-soft); color: var(--ink); resize: vertical; field-sizing: content; min-width: 12ch; max-width: 100%; }
+.ed-eq .pv { background: var(--paper); color: #16191f; border-radius: 4px; padding: 2px 6px; font-size: 15px; overflow-x: auto; }
+.ed-t.dirty, .ed-eq textarea.dirty { border-color: var(--draft); box-shadow: 0 0 0 1px var(--draft); }
+.ed-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; }
+.ed-actions .note { margin-left: auto; }
+.ed-struct { display: grid; gap: 10px; }
+.ed-struct select { width: 100%; }
+.ed-struct .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ed-struct .row .input { flex: 1; min-width: 200px; }

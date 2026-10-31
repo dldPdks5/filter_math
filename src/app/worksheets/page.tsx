@@ -7,7 +7,9 @@ export const dynamic = "force-dynamic";
 const ANS: Record<string, string> = { none: "문제만", key: "빠른 정답", solutions: "해설 포함" };
 
 export default async function WorksheetsPage() {
-  const list = await (await getRepo()).listWorksheets();
+  const repo = await getRepo();
+  const [list, problems] = await Promise.all([repo.listWorksheets(), repo.listProblems({})]);
+  const exist = new Set(problems.map((p) => p.id));
   return (
     <main className="page">
       <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginBottom: 20 }}>
@@ -31,7 +33,8 @@ export default async function WorksheetsPage() {
                 <div>
                   <Link href={`/problems?ws=${w.id}`} className="t">{w.title}</Link>
                   <div className="m">
-                    {w.problemIds.length}문제 / {ANS[w.options.answers]}{w.options.showSource ? " / 출처 표시" : ""} / {new Date(w.updatedAt).toLocaleDateString("ko-KR")} 저장
+                    {w.problemIds.filter((id) => exist.has(id)).length}문제
+                    {w.problemIds.some((id) => !exist.has(id)) && <span style={{ color: "var(--danger)" }}> (삭제된 문항 {w.problemIds.filter((id) => !exist.has(id)).length}개 빠짐)</span>} / {ANS[w.options.answers]}{w.options.showSource ? " / 출처 표시" : ""} / {new Date(w.updatedAt).toLocaleDateString("ko-KR")} 저장
                   </div>
                 </div>
                 <div className="ws-actions">
