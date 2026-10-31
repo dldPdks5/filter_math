@@ -206,6 +206,21 @@ export const localRepo: Repo = {
       await save(db);
     });
   },
+  removeExamImages(examId, binIds) {
+    return serial(async () => {
+      const db = await load();
+      let n = 0;
+      for (const b of binIds) {
+        const im = db.images[`${examId}/${b}`];
+        if (!im) continue;
+        await fs.rm(path.join(ROOT, im.file), { force: true });
+        delete db.images[`${examId}/${b}`];
+        n++;
+      }
+      await save(db);
+      return n;
+    });
+  },
   setNumbers(examId, list) {
     return serial(async () => {
       const db = await load();

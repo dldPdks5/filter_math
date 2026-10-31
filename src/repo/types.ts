@@ -110,6 +110,7 @@ export interface Repo {
   updateProblem(id: string, patch: ProblemPatch): Promise<void>;
   createProblem(examId: string, p: ProblemInput, meta: { mainUnit: string | null; tagIds: number[]; tagStatus: TagStatus }): Promise<string>;
   deleteProblem(id: string): Promise<void>;
+  removeExamImages(examId: string, binIds: string[]): Promise<number>; // 회차 그림 파일 지우고 목록에서 뺌 → 지운 개수
   setNumbers(examId: string, list: { id: string; number: number }[]): Promise<void>; // 번호 겹침 없이 한 번에 바꿈
 
   // ── 저장 공간 관리·백업용 (path는 저장소 고유 경로: Supabase는 버킷 안 경로, 로컬은 .data 기준 경로)

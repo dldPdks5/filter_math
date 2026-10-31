@@ -239,6 +239,17 @@ export function supabaseRepo(sb: SupabaseClient): Repo {
     async deleteProblem(id) {
       check(await sb.from("problems").delete().eq("id", id));
     },
+    async removeExamImages(examId, binIds) {
+      const e: any = check(await sb.from("exams").select("image_files").eq("id", examId).single());
+      const files = { ...(e.image_files ?? {}) };
+      const paths = binIds.map((b) => files[b]?.file).filter(Boolean) as string[];
+      if (!paths.length) return 0;
+      for (const b of binIds) delete files[b];
+      // 목록에서 먼저 빼고 파일을 지움 (파일 삭제가 실패해도 화면이 깨진 그림을 찾지 않게)
+      check(await sb.from("exams").update({ image_files: files }).eq("id", examId));
+      check(await sb.storage.from(BUCKET).remove(paths));
+      return paths.length;
+    },
     async setNumbers(examId, list) {
       // (회차, 번호)는 겹칠 수 없어서 먼저 음수 임시 번호로 옮긴 뒤 새 번호로
       for (let i = 0; i < list.length; i++) check(await sb.from("problems").update({ number: -(i + 1) }).eq("id", list[i].id).eq("exam_id", examId));

@@ -202,6 +202,7 @@ export default function TaggingClient({
             key={p.id}
             problemId={p.id}
             nextNumber={problems[cur + 1]?.number ?? null}
+            afterDeleteId={problems[cur + 1]?.id ?? problems[cur - 1]?.id ?? null}
             onDone={reloadAt}
             onCancel={() => setEditing(false)}
           />

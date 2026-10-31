@@ -1,6 +1,6 @@
 "use client";
-// 태그 화면의 '문제 수정' — 글자·수식·정답·번호 고치기, 문항 나누기·합치기 (저장하면 원본을 바로 덮어씀)
-import { useEffect, useMemo, useState } from "react";
+// 태그 화면의 '문제 수정' — 글자·수식·정답·번호 고치기, 문항 나누기·합치기·삭제 (저장하면 원본을 바로 덮어씀)
+import { useEffect, useMemo, useRef, useState } from "react";
 import { eqHtml } from "@/render/html";
 
 interface Piece { i: number; k: "t" | "eq"; part: "p" | "s"; para: number; inTable: boolean; v: string }
@@ -10,11 +10,13 @@ interface EditorData { id: string; number: number; answer: string; points: numbe
 export default function ProblemEditor({
   problemId,
   nextNumber,
+  afterDeleteId,
   onDone,
   onCancel,
 }: {
   problemId: string;
   nextNumber: number | null; // 다음 문항 번호 (마지막 문항이면 null → 합치기 불가)
+  afterDeleteId: string | null; // 지운 뒤 열 문항 (다음, 없으면 이전). null이면 남은 문항이 없음 → 삭제 불가
   onDone: (focusId: string) => void; // 저장·나누기·합치기 후 (페이지 다시 불러오기)
   onCancel: () => void;
 }) {
@@ -26,6 +28,9 @@ export default function ProblemEditor({
   const [splitAt, setSplitAt] = useState<number | "">("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [armed, setArmed] = useState(false); // 삭제 버튼: 한 번 더 누르면 삭제
+  const armTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(armTimer.current), []);
 
   useEffect(() => {
     let alive = true;
@@ -97,6 +102,22 @@ export default function ProblemEditor({
     onDone(problemId);
   }
 
+  async function remove() {
+    if (!data || !afterDeleteId) return;
+    if (!armed) {
+      setArmed(true);
+      clearTimeout(armTimer.current);
+      armTimer.current = setTimeout(() => setArmed(false), 4000);
+      return;
+    }
+    clearTimeout(armTimer.current);
+    setBusy(true); setMsg("지우는 중…");
+    const res = await fetch(`/api/problems/${problemId}`, { method: "DELETE" });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) { setBusy(false); setArmed(false); setMsg("지우지 못했습니다: " + json.error); return; }
+    onDone(afterDeleteId);
+  }
+
   const renderPart = (part: "p" | "s") => {
     const gs = groups.filter((g) => g.part === part);
     if (!gs.length) return <p className="note">고칠 글자나 수식이 없습니다.</p>;
@@ -158,7 +179,7 @@ export default function ProblemEditor({
       )}
 
       <section className="ed-part ed-struct">
-        <h3>문항 나누기·합치기 <small>분리가 잘못된 경우에 씁니다. 고친 내용을 먼저 저장해야 쓸 수 있습니다.</small></h3>
+        <h3>문항 나누기·합치기·삭제 <small>분리가 잘못된 경우에 씁니다. 나누기·합치기는 고친 내용을 먼저 저장해야 쓸 수 있습니다.</small></h3>
         <div className="row">
           <select className="input" value={splitAt} onChange={(e) => setSplitAt(e.target.value === "" ? "" : Number(e.target.value))} aria-label="나눌 문단" disabled={busy || dirty}>
             <option value="">나눌 문단 고르기 (이 문단부터 새 문항)</option>
@@ -173,6 +194,14 @@ export default function ProblemEditor({
             {nextNumber === null ? "다음 문항과 합치기" : `다음 문항(${nextNumber}번)과 합치기`}
           </button>
           {nextNumber === null && <span className="note">마지막 문항이라 합칠 수 없습니다.</span>}
+        </div>
+        <div className="row">
+          <button className={`btn ${armed ? "danger" : "ghost-danger"}`} onClick={remove} disabled={busy || !afterDeleteId} aria-live="polite">
+            {armed ? "한 번 더 누르면 영구 삭제" : "이 문제 삭제"}
+          </button>
+          <span className="note">
+            {afterDeleteId ? "지우면 뒤 문항 번호가 하나씩 당겨집니다. 되돌릴 수 없습니다." : "남은 문항이 하나뿐이라 지울 수 없습니다. '이 회차 삭제'를 써 주세요."}
+          </span>
         </div>
       </section>
 

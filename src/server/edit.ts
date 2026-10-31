@@ -119,6 +119,39 @@ export async function splitAt(repo: Repo, id: string, body: { fp?: string; index
   return { newId };
 }
 
+/**
+ * 문항 하나 영구 삭제 → 뒤 문항 번호를 하나씩 당김.
+ * 이 문항만 쓰던 그림 파일도 지움 (다른 문항·머리 장식·양식 파일이 쓰는 그림은 남김)
+ */
+export async function deleteOne(repo: Repo, id: string) {
+  const p = await loadProblem(repo, id);
+  const all = await siblings(repo, p.examId);
+  if (all.length <= 1) throw new EditError("회차에 남은 문항이 이것 하나뿐입니다. 회차 전체를 지우려면 '이 회차 삭제'를 써 주세요.");
+
+  // 지울 그림 후보: 이 문항만 쓰는 그림
+  const mine = new Set([...p.images, ...p.solutionImages]);
+  let unused: string[] = [];
+  if (mine.size) {
+    const exam = await repo.getExam(p.examId);
+    const zip = await JSZip.loadAsync(await repo.getExamFile(p.examId));
+    const header = (await zip.file("Contents/header.xml")?.async("string")) ?? "";
+    const others = await repo.getProblems(all.filter((x) => x.id !== id).map((x) => x.id));
+    const used = new Set<string>();
+    for (const src of [header, exam?.sectionHead ?? "", exam?.sectionTail ?? "", exam?.shellRunsXml ?? "", ...others.map((o) => o.problemXmlWithSolution)])
+      for (const m of src.matchAll(/binaryItemIDRef="([^"]+)"/g)) used.add(m[1]);
+    for (const o of others) for (const b of [...o.images, ...o.solutionImages]) used.add(b);
+    unused = [...mine].filter((b) => !used.has(b));
+  }
+
+  await repo.deleteProblem(id); // 태그 연결은 DB가 함께 지움
+  const later = all.filter((x) => x.number > p.number);
+  if (later.length) await repo.setNumbers(p.examId, later.map((x) => ({ id: x.id, number: x.number - 1 })));
+  // 그림 정리는 실패해도 삭제 자체는 끝난 것으로 봄 (남은 파일은 용량만 차지)
+  let images = 0;
+  if (unused.length) images = await repo.removeExamImages(p.examId, unused).catch(() => 0);
+  return { deletedNumber: p.number, images };
+}
+
 /** 바로 다음 번호 문항을 이 문항 뒤에 붙임 → 다음 문항은 없어지고 그 뒤 번호가 하나씩 당겨짐 */
 export async function mergeNext(repo: Repo, id: string, body: { fp?: string }) {
   const a = await loadProblem(repo, id);
