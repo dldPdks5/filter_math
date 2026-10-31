@@ -163,6 +163,77 @@ export const localRepo: Repo = {
     });
   },
 
+  // ── 회차 삭제·문항 수정
+  deleteExam(id) {
+    return serial(async () => {
+      const db = await load();
+      const e = db.exams.find((x) => x.id === id);
+      if (!e) throw new Error("회차를 찾을 수 없습니다");
+      const files = new Set<string>([e.filePath]);
+      for (const [k, v] of Object.entries(db.images)) if (k.startsWith(id + "/")) { files.add(v.file); delete db.images[k]; }
+      db.exams = db.exams.filter((x) => x.id !== id);
+      db.problems = db.problems.filter((p) => p.examId !== id);
+      await save(db);
+      for (const f of files) await fs.rm(path.join(ROOT, f), { force: true });
+      await fs.rm(path.join(ROOT, "files", id), { recursive: true, force: true });
+      return { files: files.size };
+    });
+  },
+  updateProblem(id, patch) {
+    return serial(async () => {
+      const db = await load();
+      const p = db.problems.find((x) => x.id === id);
+      if (!p) throw new Error("문항을 찾을 수 없습니다");
+      const { tagIds, ...rest } = patch;
+      for (const [k, v] of Object.entries(rest)) if (v !== undefined) (p as any)[k] = v;
+      if (tagIds) p.tagIds = [...new Set(tagIds)];
+      await save(db);
+    });
+  },
+  createProblem(examId, input, meta) {
+    return serial(async () => {
+      const db = await load();
+      const id = crypto.randomUUID();
+      db.problems.push({ ...input, id, examId, mainUnit: meta.mainUnit, tagStatus: meta.tagStatus, tagIds: [...new Set(meta.tagIds)] });
+      await save(db);
+      return id;
+    });
+  },
+  deleteProblem(id) {
+    return serial(async () => {
+      const db = await load();
+      db.problems = db.problems.filter((p) => p.id !== id);
+      await save(db);
+    });
+  },
+  removeExamImages(examId, binIds) {
+    return serial(async () => {
+      const db = await load();
+      let n = 0;
+      for (const b of binIds) {
+        const im = db.images[`${examId}/${b}`];
+        if (!im) continue;
+        await fs.rm(path.join(ROOT, im.file), { force: true });
+        delete db.images[`${examId}/${b}`];
+        n++;
+      }
+      await save(db);
+      return n;
+    });
+  },
+  setNumbers(examId, list) {
+    return serial(async () => {
+      const db = await load();
+      for (const { id, number } of list) {
+        const p = db.problems.find((x) => x.id === id && x.examId === examId);
+        if (p) p.number = number;
+      }
+      const nums = db.problems.filter((p) => p.examId === examId).map((p) => p.number);
+      if (new Set(nums).size !== nums.length) throw new Error("문항 번호가 겹칩니다");
+      await save(db);
+    });
+  },
+
   // ── 저장 공간 관리·백업
   async listFiles() {
     const out: StoredFile[] = [];

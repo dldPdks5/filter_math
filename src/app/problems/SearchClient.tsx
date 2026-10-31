@@ -24,11 +24,13 @@ export default function SearchClient({
   exams,
   problems,
   initialWorksheet,
+  missingCount = 0,
 }: {
   taxonomy: Taxonomy;
   exams: { id: string; title: string; curriculum: string }[];
   problems: SearchProblem[];
   initialWorksheet: Worksheet | null;
+  missingCount?: number; // 저장 학습지에서 지워진 문항 수
 }) {
   // ── 필터 상태
   const [linked, setLinked] = useState(true);
@@ -47,7 +49,7 @@ export default function SearchClient({
   const [basket, setBasket] = useState<string[]>(initialWorksheet?.problemIds ?? []);
   const [title, setTitle] = useState(initialWorksheet?.title ?? "");
   const [opts, setOpts] = useState<WorksheetOptions>(initialWorksheet?.options ?? { answers: "key", showSource: false });
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState(missingCount ? `삭제된 문항 ${missingCount}개가 빠졌습니다. 다시 저장하면 학습지 목록에서도 정리됩니다.` : "");
   const [busy, setBusy] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 

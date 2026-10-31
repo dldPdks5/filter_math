@@ -176,6 +176,86 @@ export function supabaseRepo(sb: SupabaseClient): Repo {
       check(await sb.from("worksheets").delete().eq("id", id));
     },
 
+    // ── 회차 삭제·문항 수정
+    async deleteExam(id) {
+      const e: any = check(await sb.from("exams").select("file_path, image_files").eq("id", id).maybeSingle());
+      if (!e) throw new Error("회차를 찾을 수 없습니다");
+      // 지울 파일: 양식 파일 + 그림 + 회차 폴더 안에 남은 파일
+      const files = new Set<string>([e.file_path, ...Object.values(e.image_files ?? {}).map((v: any) => v.file)]);
+      const walk = async (prefix: string) => {
+        for (let offset = 0; ; offset += 1000) {
+          const items = check(await sb.storage.from(BUCKET).list(prefix, { limit: 1000, offset })) as any[];
+          for (const it of items) {
+            const full = `${prefix}/${it.name}`;
+            if (it.id === null) await walk(full);
+            else files.add(full);
+          }
+          if (items.length < 1000) break;
+        }
+      };
+      await walk(id);
+      // 회차 행을 지우면 문항·태그 연결은 DB가 함께 지움 (on delete cascade)
+      check(await sb.from("exams").delete().eq("id", id));
+      const list = [...files].filter(Boolean);
+      for (let i = 0; i < list.length; i += 100) check(await sb.storage.from(BUCKET).remove(list.slice(i, i + 100)));
+      return { files: list.length };
+    },
+    async updateProblem(id, patch) {
+      const upd: Record<string, unknown> = {};
+      if (patch.number !== undefined) upd.number = patch.number;
+      if (patch.answer !== undefined) upd.answer = patch.answer;
+      if (patch.points !== undefined && hasPoints) upd.points = patch.points;
+      if (patch.problemXmlWithSolution !== undefined) upd.problem_xml_sol = patch.problemXmlWithSolution;
+      if (patch.problemBlocks !== undefined) upd.problem_blocks = patch.problemBlocks;
+      if (patch.solutionBlocks !== undefined) upd.solution_blocks = patch.solutionBlocks;
+      if (patch.images !== undefined) upd.images = patch.images;
+      if (patch.solutionImages !== undefined) upd.solution_images = patch.solutionImages;
+      if (patch.mainUnit !== undefined) upd.main_unit = patch.mainUnit;
+      if (patch.tagStatus !== undefined) upd.tag_status = patch.tagStatus;
+      if (Object.keys(upd).length) {
+        let r = await sb.from("problems").update(upd).eq("id", id);
+        if (missingPoints(r.error)) { hasPoints = false; delete upd.points; r = await sb.from("problems").update(upd).eq("id", id); }
+        check(r);
+      }
+      if (patch.tagIds) {
+        check(await sb.from("problem_tags").delete().eq("problem_id", id));
+        const ids = [...new Set(patch.tagIds)];
+        if (ids.length) check(await sb.from("problem_tags").insert(ids.map((tag_id) => ({ problem_id: id, tag_id }))));
+      }
+    },
+    async createProblem(examId, p, meta) {
+      const row: Record<string, unknown> = {
+        exam_id: examId, number: p.number, answer: p.answer, problem_xml: "", problem_xml_sol: p.problemXmlWithSolution, solution_xml: null,
+        problem_blocks: p.problemBlocks, solution_blocks: p.solutionBlocks, images: p.images, solution_images: p.solutionImages,
+        main_unit: meta.mainUnit, tag_status: meta.tagStatus, ...(hasPoints ? { points: p.points } : {}),
+      };
+      let ins = await sb.from("problems").insert(row).select("id").single();
+      if (missingPoints(ins.error)) { hasPoints = false; delete row.points; ins = await sb.from("problems").insert(row).select("id").single(); }
+      const id = (check(ins) as any).id as string;
+      const ids = [...new Set(meta.tagIds)];
+      if (ids.length) check(await sb.from("problem_tags").insert(ids.map((tag_id) => ({ problem_id: id, tag_id }))));
+      return id;
+    },
+    async deleteProblem(id) {
+      check(await sb.from("problems").delete().eq("id", id));
+    },
+    async removeExamImages(examId, binIds) {
+      const e: any = check(await sb.from("exams").select("image_files").eq("id", examId).single());
+      const files = { ...(e.image_files ?? {}) };
+      const paths = binIds.map((b) => files[b]?.file).filter(Boolean) as string[];
+      if (!paths.length) return 0;
+      for (const b of binIds) delete files[b];
+      // 목록에서 먼저 빼고 파일을 지움 (파일 삭제가 실패해도 화면이 깨진 그림을 찾지 않게)
+      check(await sb.from("exams").update({ image_files: files }).eq("id", examId));
+      check(await sb.storage.from(BUCKET).remove(paths));
+      return paths.length;
+    },
+    async setNumbers(examId, list) {
+      // (회차, 번호)는 겹칠 수 없어서 먼저 음수 임시 번호로 옮긴 뒤 새 번호로
+      for (let i = 0; i < list.length; i++) check(await sb.from("problems").update({ number: -(i + 1) }).eq("id", list[i].id).eq("exam_id", examId));
+      for (const { id, number } of list) check(await sb.from("problems").update({ number }).eq("id", id).eq("exam_id", examId));
+    },
+
     // ── 저장 공간 관리·백업
     async listFiles() {
       const out: StoredFile[] = [];
